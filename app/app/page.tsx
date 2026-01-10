@@ -249,6 +249,55 @@ export default function AppPage() {
     }
   }
 
+  const handleCancelSubscription = async (id: string) => {
+    const subscription = subscriptions.find((sub) => sub.id === id)
+    if (!subscription) return
+
+    // Find the service in catalog to get cancelUrl
+    const catalogService = subscriptionCatalog.find(
+      (service) => service.serviceName === subscription.service
+    )
+    const cancelUrl = catalogService?.cancelUrl
+
+    // If no cancel URL, show friendly message
+    if (!cancelUrl) {
+      alert(
+        `Cancel URL not available for ${subscription.service}. Please visit the provider's website to cancel your subscription.`
+      )
+      return
+    }
+
+    // Open cancel URL in new tab immediately (before async operations to avoid popup blocker)
+    const newWindow = window.open(cancelUrl, "_blank", "noopener,noreferrer")
+
+    // Mark as cancelled in DB (if not already cancelled)
+    if (!subscription.cancelled) {
+      try {
+        const { error } = await supabase
+          .from("subscriptions")
+          .update({ cancelled: true })
+          .eq("id", id)
+
+        if (error) {
+          console.error(error)
+          // If window was blocked, user can try again
+          if (!newWindow || newWindow.closed || typeof newWindow.closed === "undefined") {
+            alert("Popup was blocked. Please allow popups for this site and try again, or manually visit the cancel page.")
+          }
+          return
+        }
+
+        setSubscriptions(
+          subscriptions.map((sub) =>
+            sub.id === id ? { ...sub, cancelled: true } : sub
+          )
+        )
+      } catch (error: any) {
+        console.error(error)
+      }
+    }
+  }
+
 
   // Calculate totals (excluding cancelled subscriptions)
   const activeSubscriptions = subscriptions.filter((sub) => !sub.cancelled)
@@ -442,6 +491,15 @@ export default function AppPage() {
                             onChange={() => handleToggleCancelled(sub.id)}
                             label="Cancelled"
                           />
+                          {!sub.cancelled && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCancelSubscription(sub.id)}
+                            >
+                              Cancel
+                            </Button>
+                          )}
                           <Button
                             variant="destructive"
                             size="sm"
