@@ -17,6 +17,19 @@ interface Subscription {
   category: string
 }
 
+type TextAnchor = "start" | "middle" | "end" | "inherit"
+
+interface SubscriptionPosition {
+  subscription: Subscription
+  x: number
+  y: number
+  circleRadius: number
+  textX: number
+  textY: number
+  textAnchor: TextAnchor
+  monthlyCost: number
+}
+
 // Deterministic color mapping from category to Tailwind color classes
 const categoryColors = [
   "fill-blue-500",
@@ -97,7 +110,7 @@ export default function MapPage() {
   }
 
   // Calculate positions evenly distributed around the circle
-  const positions = subscriptions.map((sub, index) => {
+  const positions: SubscriptionPosition[] = subscriptions.map((sub, index) => {
     const angle = (index * (2 * Math.PI)) / subscriptions.length - Math.PI / 2 // Start from top
     const monthlyCost = getMonthlyCost(sub)
     const x = centerX + radius * Math.cos(angle)
@@ -107,9 +120,9 @@ export default function MapPage() {
     // Text position - offset to avoid overlap with circle
     const textX = x + (x > centerX ? circleRadius + 10 : -(circleRadius + 10))
     const textY = y
-    const textAnchor: "start" | "middle" | "end" | "inherit" = x > centerX ? "start" : "end"
+    const textAnchor: TextAnchor = x > centerX ? "start" : "end"
 
-    return {
+    const position: SubscriptionPosition = {
       subscription: sub,
       x,
       y,
@@ -119,6 +132,7 @@ export default function MapPage() {
       textAnchor,
       monthlyCost,
     }
+    return position
   })
 
   if (loading) {
@@ -209,7 +223,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY - 5}
-                        textAnchor={pos.textAnchor as "inherit" | "start" | "end" | "middle"}
+                        textAnchor={pos.textAnchor}
                         className="fill-foreground font-semibold"
                         fontSize="12"
                       >
@@ -218,7 +232,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY + 10}
-                        textAnchor={pos.textAnchor as "inherit" | "start" | "end" | "middle"}
+                        textAnchor={pos.textAnchor}
                         className="fill-muted-foreground"
                         fontSize="11"
                       >
