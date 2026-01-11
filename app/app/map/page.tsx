@@ -17,8 +17,6 @@ interface Subscription {
   category: string
 }
 
-type SvgTextAnchor = "inherit" | "start" | "end" | "middle"
-
 interface Position {
   subscription: Subscription
   x: number
@@ -26,7 +24,6 @@ interface Position {
   circleRadius: number
   textX: number
   textY: number
-  textAnchor: SvgTextAnchor
   monthlyCost: number
 }
 
@@ -120,7 +117,6 @@ export default function MapPage() {
     // Text position - offset to avoid overlap with circle
     const textX = x + (x > centerX ? circleRadius + 10 : -(circleRadius + 10))
     const textY = y
-    const textAnchor: SvgTextAnchor = x > centerX ? "start" : "end"
 
     return {
       subscription: sub,
@@ -129,7 +125,6 @@ export default function MapPage() {
       circleRadius,
       textX,
       textY,
-      textAnchor,
       monthlyCost,
     }
   })
@@ -222,7 +217,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY - 5}
-                        textAnchor={pos.textAnchor}
+                        textAnchor="middle"
                         className="fill-foreground font-semibold"
                         fontSize="12"
                       >
@@ -231,7 +226,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY + 10}
-                        textAnchor={pos.textAnchor}
+                        textAnchor="middle"
                         className="fill-muted-foreground"
                         fontSize="11"
                       >
