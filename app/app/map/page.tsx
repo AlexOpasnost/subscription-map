@@ -107,7 +107,7 @@ export default function MapPage() {
     // Text position - offset to avoid overlap with circle
     const textX = x + (x > centerX ? circleRadius + 10 : -(circleRadius + 10))
     const textY = y
-    const textAnchor: "start" | "end" = x > centerX ? "start" : "end"
+    const textAnchor: "start" | "middle" | "end" | "inherit" = x > centerX ? "start" : "end"
 
     return {
       subscription: sub,
