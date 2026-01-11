@@ -17,16 +17,16 @@ interface Subscription {
   category: string
 }
 
-type TextAnchor = "start" | "middle" | "end" | "inherit"
+type SvgTextAnchor = "inherit" | "start" | "end" | "middle"
 
-interface SubscriptionPosition {
+interface Position {
   subscription: Subscription
   x: number
   y: number
   circleRadius: number
   textX: number
   textY: number
-  textAnchor: TextAnchor
+  textAnchor: SvgTextAnchor
   monthlyCost: number
 }
 
@@ -110,7 +110,7 @@ export default function MapPage() {
   }
 
   // Calculate positions evenly distributed around the circle
-  const positions: SubscriptionPosition[] = subscriptions.map((sub, index) => {
+  const positions: Position[] = subscriptions.map((sub, index): Position => {
     const angle = (index * (2 * Math.PI)) / subscriptions.length - Math.PI / 2 // Start from top
     const monthlyCost = getMonthlyCost(sub)
     const x = centerX + radius * Math.cos(angle)
@@ -120,9 +120,9 @@ export default function MapPage() {
     // Text position - offset to avoid overlap with circle
     const textX = x + (x > centerX ? circleRadius + 10 : -(circleRadius + 10))
     const textY = y
-    const textAnchor: TextAnchor = x > centerX ? "start" : "end"
+    const textAnchor: SvgTextAnchor = x > centerX ? "start" : "end"
 
-    const position: SubscriptionPosition = {
+    return {
       subscription: sub,
       x,
       y,
@@ -132,7 +132,6 @@ export default function MapPage() {
       textAnchor,
       monthlyCost,
     }
-    return position
   })
 
   if (loading) {
