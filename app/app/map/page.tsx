@@ -209,7 +209,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY - 5}
-                        textAnchor={pos.textAnchor}
+                        textAnchor={pos.textAnchor as "inherit" | "start" | "end" | "middle"}
                         className="fill-foreground font-semibold"
                         fontSize="12"
                       >
@@ -218,7 +218,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY + 10}
-                        textAnchor={pos.textAnchor}
+                        textAnchor={pos.textAnchor as "inherit" | "start" | "end" | "middle"}
                         className="fill-muted-foreground"
                         fontSize="11"
                       >
