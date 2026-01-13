@@ -34,12 +34,19 @@ export function useAuth() {
   return { user, loading, signOut }
 }
 
+function getAuthRedirectUrl(): string {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  if (siteUrl) {
+    return `${siteUrl}/auth/callback`
+  }
+  return "http://localhost:3000/auth/callback"
+}
+
 export async function signInWithEmail(email: string) {
   return supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${window.location.origin}/auth/callback`,
+      emailRedirectTo: getAuthRedirectUrl(),
     },
   })
 }
-

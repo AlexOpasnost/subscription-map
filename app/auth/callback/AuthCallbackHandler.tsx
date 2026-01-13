@@ -27,8 +27,8 @@ export default function AuthCallbackHandler() {
           }
 
           if (data.session) {
-            // Success - redirect to app
-            router.replace("/app");
+            // Success - redirect to app/map
+            router.replace("/app/map");
           } else {
             setMsg("No session found. Redirecting to login…");
             setTimeout(() => router.replace("/login"), 2000);
