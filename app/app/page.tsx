@@ -34,7 +34,6 @@ export default function AppPage() {
   const { user, signOut } = useAuth()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     serviceName: "",
     selectedPlanIndex: null as number | null,
@@ -335,10 +334,10 @@ export default function AppPage() {
       description="Make informed decisions about recurring expenses"
       actions={
         <>
-          <Button variant="outline" size="sm" asChild>
+          <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
             <Link href="/app/map">View Map</Link>
           </Button>
-          <Button variant="outline" size="sm" onClick={signOut}>
+          <Button variant="outline" size="sm" onClick={signOut} className="w-full sm:w-auto">
             Sign Out
           </Button>
         </>
@@ -352,7 +351,7 @@ export default function AppPage() {
           <CardDescription>Enter the details of your subscription</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="service">Service</Label>
               <div className="relative">
@@ -413,38 +412,36 @@ export default function AppPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="price">Price</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={formData.price}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                  required
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="price">Price</Label>
+              <Input
+                id="price"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                required
+              />
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="period">Period</Label>
-                <Select
-                  value={formData.period}
-                  onValueChange={(value: Period) =>
-                    setFormData({ ...formData, period: value })
-                  }
-                >
-                  <SelectTrigger id="period">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="period">Period</Label>
+              <Select
+                value={formData.period}
+                onValueChange={(value: Period) =>
+                  setFormData({ ...formData, period: value })
+                }
+              >
+                <SelectTrigger id="period">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="yearly">Yearly</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="space-y-2 sm:col-span-2">
@@ -503,21 +500,16 @@ export default function AppPage() {
                         sub.cancelled ? "opacity-50" : ""
                       }`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="mb-2 sm:mb-1">
+                      <div className="space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
+                          <div className="flex-1 min-w-0">
                             <h3 className={`text-base sm:text-lg font-semibold leading-tight break-words ${
                               sub.cancelled ? "line-through text-muted-foreground" : ""
                             }`}>
                               {sub.service}
                             </h3>
-                            {sub.plan && (
-                              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 break-words">
-                                {sub.plan}
-                              </p>
-                            )}
                           </div>
-                          <div className="flex items-baseline gap-2 mb-2 sm:mb-1">
+                          <div className="flex items-baseline gap-2 shrink-0">
                             <span className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums">
                               ${monthlyPrice.toFixed(2)}
                             </span>
@@ -525,103 +517,58 @@ export default function AppPage() {
                               /mo
                             </span>
                           </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
-                              {sub.category}
-                            </span>
-                            {sub.cancelled && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
-                                Inactive
-                              </span>
-                            )}
-                            <span className="text-xs text-muted-foreground">
-                              ${yearlyPrice.toFixed(0)}/yr
-                            </span>
-                          </div>
                         </div>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 relative">
-                          <div className="flex items-center gap-2 w-full sm:w-auto">
-                            {!sub.cancelled && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setOpenMenuId(openMenuId === sub.id ? null : sub.id)}
-                                  className="h-9 w-9 p-0 shrink-0"
-                                  aria-label="More options"
-                                >
-                                  <svg
-                                    className="h-4 w-4"
-                                    fill="none"
-                                    viewBox="0 0 24 24"
-                                    stroke="currentColor"
-                                    strokeWidth={2}
-                                  >
-                                    <path
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-                                    />
-                                  </svg>
-                                </Button>
-                                {openMenuId === sub.id && (
-                                  <>
-                                    <div
-                                      className="fixed inset-0 z-10"
-                                      onClick={() => setOpenMenuId(null)}
-                                    />
-                                    <div className="absolute right-0 top-10 z-20 w-48 rounded-lg border border-border bg-card shadow-lg py-1">
-                                      <button
-                                        onClick={() => {
-                                          handleCancelSubscription(sub.id)
-                                          setOpenMenuId(null)
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors"
-                                      >
-                                        Manage subscription
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          if (confirm(`Delete ${sub.service}? This cannot be undone.`)) {
-                                            handleDelete(sub.id)
-                                          }
-                                          setOpenMenuId(null)
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-accent transition-colors"
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </>
-                                )}
-                              </>
-                            )}
-                            <button
-                              onClick={() => handleToggleCancelled(sub.id)}
-                              className={`h-9 w-9 rounded-md border-2 transition-colors flex items-center justify-center touch-manipulation shrink-0 ${
-                                sub.cancelled
-                                  ? "bg-primary border-primary"
-                                  : "border-border hover:border-primary/50 active:border-primary"
-                              }`}
-                              aria-label={sub.cancelled ? "Mark as active" : "Mark as inactive"}
-                            >
-                              {sub.cancelled && (
-                                <svg
-                                  className="h-4 w-4 text-primary-foreground"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                  strokeWidth={3}
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    d="M5 13l4 4L19 7"
-                                  />
-                                </svg>
-                              )}
-                            </button>
-                          </div>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {sub.plan && (
+                            <span className="text-xs sm:text-sm text-muted-foreground break-words">
+                              {sub.plan}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
+                            {sub.category}
+                          </span>
+                          {sub.cancelled && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
+                              Inactive
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">
+                            ${yearlyPrice.toFixed(0)}/yr
+                          </span>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2 pt-2 border-t border-border">
+                          {!sub.cancelled && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleCancelSubscription(sub.id)}
+                                className="w-full sm:w-auto"
+                              >
+                                Manage
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => {
+                                  if (confirm(`Delete ${sub.service}? This cannot be undone.`)) {
+                                    handleDelete(sub.id)
+                                  }
+                                }}
+                                className="w-full sm:w-auto"
+                              >
+                                Delete
+                              </Button>
+                            </>
+                          )}
+                          <Checkbox
+                            checked={sub.cancelled || false}
+                            onChange={() => handleToggleCancelled(sub.id)}
+                            label="Paused"
+                            className="shrink-0"
+                          />
                         </div>
                       </div>
                     </div>
