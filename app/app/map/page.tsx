@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
+import PageShell from "@/components/PageShell"
 
 type Period = "monthly" | "yearly"
 
@@ -131,28 +132,31 @@ export default function MapPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto max-w-6xl py-12 px-4">
+      <PageShell title="Subscription Map" maxWidth="6xl">
         <p className="text-muted-foreground">Loading...</p>
-      </div>
+      </PageShell>
     )
   }
 
   if (subscriptions.length === 0) {
     return (
-      <div className="container mx-auto max-w-4xl py-12 px-4">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">Subscription Map</h1>
-          <p className="text-muted-foreground">
-            Visual representation of your subscriptions
-          </p>
-        </div>
+      <PageShell
+        title="Subscription Map"
+        description="Visual representation of your subscriptions"
+        actions={
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/app">Back to Subscriptions</Link>
+          </Button>
+        }
+        maxWidth="4xl"
+      >
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-20">
+          <CardContent className="flex flex-col items-center justify-center py-12 sm:py-20">
             <div className="text-center space-y-4 max-w-md">
-              <h3 className="text-xl font-semibold">
+              <h3 className="text-lg sm:text-xl font-semibold">
                 You're all set — now add your first subscription
               </h3>
-              <p className="text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 Add a subscription to start visualizing where your money goes every month.
               </p>
               <Button asChild className="mt-4">
@@ -161,25 +165,29 @@ export default function MapPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-      <div className="container mx-auto max-w-6xl py-12 px-4">
-        <div className="mb-12">
-          <h1 className="text-4xl font-bold tracking-tight mb-2">Subscription Map</h1>
-          <p className="text-muted-foreground text-lg">
-            Visual representation of your subscriptions
-          </p>
-        </div>
-
-        <Card>
-          <CardContent className="p-8">
-            <div className="flex justify-center">
+    <PageShell
+      title="Subscription Map"
+      description="Visual representation of your subscriptions"
+      actions={
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/app">Back to Subscriptions</Link>
+        </Button>
+      }
+      maxWidth="6xl"
+    >
+      <Card>
+        <CardContent className="p-3 sm:p-5">
+          <div className="w-full overflow-x-auto">
+            <div className="rounded-xl border bg-card p-3 sm:p-5 min-w-0">
               <svg
                 viewBox={`0 0 ${svgSize} ${svgSize}`}
-                className="w-full h-auto max-w-full"
+                preserveAspectRatio="xMidYMid meet"
+                className="w-full h-auto"
                 xmlns="http://www.w3.org/2000/svg"
               >
                 {/* Background */}
@@ -199,7 +207,7 @@ export default function MapPage() {
                 <text
                   x={centerX}
                   y={centerY + 5}
-                  textAnchor="middle"
+                  textAnchor={"middle" as const}
                   className="fill-white dark:fill-gray-900 font-semibold"
                   fontSize="14"
                 >
@@ -224,7 +232,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY - 5}
-                        textAnchor="middle"
+                        textAnchor={"middle" as const}
                         className="fill-foreground font-semibold"
                         fontSize="12"
                       >
@@ -233,7 +241,7 @@ export default function MapPage() {
                       <text
                         x={pos.textX}
                         y={pos.textY + 10}
-                        textAnchor="middle"
+                        textAnchor={"middle" as const}
                         className="fill-muted-foreground"
                         fontSize="11"
                       >
@@ -259,14 +267,9 @@ export default function MapPage() {
                 ))}
               </svg>
             </div>
-          </CardContent>
-        </Card>
-
-        <div className="mt-12 flex justify-center">
-          <Button variant="outline" asChild>
-            <Link href="/app">Back to Subscriptions</Link>
-          </Button>
-        </div>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
+    </PageShell>
   )
 }

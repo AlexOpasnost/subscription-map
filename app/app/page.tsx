@@ -17,6 +17,7 @@ import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import Link from "next/link"
+import PageShell from "@/components/PageShell"
 
 interface Subscription {
   id: string
@@ -33,6 +34,7 @@ export default function AppPage() {
   const { user, signOut } = useAuth()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     serviceName: "",
     selectedPlanIndex: null as number | null,
@@ -321,93 +323,97 @@ export default function AppPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto max-w-4xl py-12 px-4">
+      <PageShell title="Subscriptions" maxWidth="4xl">
         <p className="text-muted-foreground">Loading...</p>
-      </div>
+      </PageShell>
     )
   }
 
   return (
-    <div className="container mx-auto max-w-4xl py-12 px-4">
-      <div className="flex justify-between items-center mb-12">
-        <h1 className="text-4xl font-bold tracking-tight">Subscriptions</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
+    <PageShell
+      title="Subscriptions"
+      description="Make informed decisions about recurring expenses"
+      actions={
+        <>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/app/map">View Map</Link>
           </Button>
-          <Button variant="outline" onClick={signOut}>
+          <Button variant="outline" size="sm" onClick={signOut}>
             Sign Out
           </Button>
-        </div>
-      </div>
+        </>
+      }
+      maxWidth="4xl"
+    >
 
-        <Card className="mb-12">
-          <CardHeader>
-            <CardTitle>Add Subscription</CardTitle>
-            <CardDescription>Enter the details of your subscription</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="service">Service</Label>
-                <div className="relative">
-                  <Input
-                    ref={serviceInputRef}
-                    id="service"
-                    type="text"
-                    placeholder="Search for a service..."
-                    value={serviceSearch}
-                    onChange={(e) => {
-                      setServiceSearch(e.target.value)
-                      setShowServiceDropdown(true)
-                      if (!e.target.value) {
-                        setFormData({ ...formData, serviceName: "", selectedPlanIndex: null, price: "", period: "monthly" })
-                      }
-                    }}
-                    onFocus={() => setShowServiceDropdown(true)}
-                    required
-                  />
-                  {showServiceDropdown && filteredServices.length > 0 && (
-                    <div
-                      ref={serviceDropdownRef}
-                      className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
-                    >
-                      {filteredServices.map((service) => (
-                        <button
-                          key={service.serviceName}
-                          type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
-                          onClick={() => handleServiceSelect(service.serviceName)}
-                        >
-                          {service.serviceName}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {selectedService && availablePlans.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="plan">Plan</Label>
-                  <Select 
-                    value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
-                    onValueChange={handlePlanSelect}
+      <Card className="mb-6 sm:mb-8">
+        <CardHeader>
+          <CardTitle>Add Subscription</CardTitle>
+          <CardDescription>Enter the details of your subscription</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="service">Service</Label>
+              <div className="relative">
+                <Input
+                  ref={serviceInputRef}
+                  id="service"
+                  type="text"
+                  placeholder="Search for a service..."
+                  value={serviceSearch}
+                  onChange={(e) => {
+                    setServiceSearch(e.target.value)
+                    setShowServiceDropdown(true)
+                    if (!e.target.value) {
+                      setFormData({ ...formData, serviceName: "", selectedPlanIndex: null, price: "", period: "monthly" })
+                    }
+                  }}
+                  onFocus={() => setShowServiceDropdown(true)}
+                  required
+                />
+                {showServiceDropdown && filteredServices.length > 0 && (
+                  <div
+                    ref={serviceDropdownRef}
+                    className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
                   >
-                    <SelectTrigger id="plan">
-                      <SelectValue placeholder="Select a plan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availablePlans.map((plan, idx) => (
-                        <SelectItem key={idx.toString()} value={idx.toString()}>
-                          {plan.name} - ${plan.price.toFixed(2)}/{plan.period === "monthly" ? "mo" : "yr"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
+                    {filteredServices.map((service) => (
+                      <button
+                        key={service.serviceName}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
+                        onClick={() => handleServiceSelect(service.serviceName)}
+                      >
+                        {service.serviceName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
 
+            {selectedService && availablePlans.length > 0 && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="plan">Plan</Label>
+                <Select 
+                  value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
+                  onValueChange={handlePlanSelect}
+                >
+                  <SelectTrigger id="plan">
+                    <SelectValue placeholder="Select a plan" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availablePlans.map((plan, idx) => (
+                      <SelectItem key={idx.toString()} value={idx.toString()}>
+                        {plan.name} - ${plan.price.toFixed(2)}/{plan.period === "monthly" ? "mo" : "yr"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="price">Price</Label>
                 <Input
@@ -439,135 +445,220 @@ export default function AppPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  type="text"
-                  placeholder="e.g., Entertainment"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  required
-                />
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="category">Category</Label>
+              <Input
+                id="category"
+                type="text"
+                placeholder="e.g., Entertainment"
+                value={formData.category}
+                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="sm:col-span-2">
+              <Button type="submit" className="w-full sm:w-auto">Add Subscription</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <div className="space-y-6 sm:space-y-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Subscriptions</CardTitle>
+            <CardDescription>Your active subscriptions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {subscriptions.length === 0 ? (
+              <div className="py-12 sm:py-16 text-center space-y-4">
+                <h3 className="text-lg sm:text-xl font-semibold">
+                  You're all set — now add your first subscription
+                </h3>
+                <p className="text-sm sm:text-base text-muted-foreground max-w-md mx-auto">
+                  Add a subscription to start visualizing where your money goes every month.
+                </p>
+                <Button
+                  onClick={() => {
+                    document.getElementById("service")?.focus()
+                  }}
+                  className="mt-4"
+                >
+                  Add subscription
+                </Button>
               </div>
-
-              <Button type="submit">Add Subscription</Button>
-            </form>
-          </CardContent>
-        </Card>
-
-        <div className="space-y-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Subscriptions</CardTitle>
-              <CardDescription>Make informed decisions about recurring expenses</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {subscriptions.length === 0 ? (
-                <div className="py-16 text-center space-y-4">
-                  <h3 className="text-xl font-semibold">
-                    You're all set — now add your first subscription
-                  </h3>
-                  <p className="text-muted-foreground max-w-md mx-auto">
-                    Add a subscription to start visualizing where your money goes every month.
-                  </p>
-                  <Button
-                    onClick={() => {
-                      document.getElementById("service")?.focus()
-                    }}
-                    className="mt-4"
-                  >
-                    Add subscription
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {subscriptions.map((sub) => {
-                    const price = sub.price_cents / 100
-                    return (
-                      <div
-                        key={sub.id}
-                        className={`flex items-center justify-between p-4 border rounded-md ${
-                          sub.cancelled ? "opacity-60" : ""
-                        }`}
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <h3 className={`font-semibold ${sub.cancelled ? "line-through" : ""}`}>
+            ) : (
+              <div className="space-y-3 sm:space-y-4">
+                {subscriptions.map((sub) => {
+                  const price = sub.price_cents / 100
+                  const monthlyPrice = sub.period === "monthly" ? price : price / 12
+                  const yearlyPrice = sub.period === "yearly" ? price : price * 12
+                  return (
+                    <div
+                      key={sub.id}
+                      className={`group relative bg-card border border-border rounded-xl p-3 sm:p-5 shadow-sm transition-all hover:shadow-md ${
+                        sub.cancelled ? "opacity-50" : ""
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="mb-2 sm:mb-1">
+                            <h3 className={`text-base sm:text-lg font-semibold leading-tight break-words ${
+                              sub.cancelled ? "line-through text-muted-foreground" : ""
+                            }`}>
                               {sub.service}
                             </h3>
                             {sub.plan && (
-                              <span className="text-xs text-muted-foreground">({sub.plan})</span>
+                              <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 break-words">
+                                {sub.plan}
+                              </p>
                             )}
+                          </div>
+                          <div className="flex items-baseline gap-2 mb-2 sm:mb-1">
+                            <span className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums">
+                              ${monthlyPrice.toFixed(2)}
+                            </span>
+                            <span className="text-xs sm:text-sm font-medium text-muted-foreground">
+                              /mo
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
+                              {sub.category}
+                            </span>
                             {sub.cancelled && (
-                              <span className="text-xs bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">
+                              <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
                                 Inactive
                               </span>
                             )}
+                            <span className="text-xs text-muted-foreground">
+                              ${yearlyPrice.toFixed(0)}/yr
+                            </span>
                           </div>
-                          <p className="text-sm text-muted-foreground">
-                            {sub.category} • ${price.toFixed(2)}/{sub.period === "monthly" ? "mo" : "yr"}
-                          </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Checkbox
-                            checked={sub.cancelled || false}
-                            onChange={() => handleToggleCancelled(sub.id)}
-                            label="Inactive"
-                          />
-                          {!sub.cancelled && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleCancelSubscription(sub.id)}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 relative">
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            {!sub.cancelled && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setOpenMenuId(openMenuId === sub.id ? null : sub.id)}
+                                  className="h-9 w-9 p-0 shrink-0"
+                                  aria-label="More options"
+                                >
+                                  <svg
+                                    className="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                    strokeWidth={2}
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                                    />
+                                  </svg>
+                                </Button>
+                                {openMenuId === sub.id && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-10"
+                                      onClick={() => setOpenMenuId(null)}
+                                    />
+                                    <div className="absolute right-0 top-10 z-20 w-48 rounded-lg border border-border bg-card shadow-lg py-1">
+                                      <button
+                                        onClick={() => {
+                                          handleCancelSubscription(sub.id)
+                                          setOpenMenuId(null)
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm hover:bg-accent transition-colors"
+                                      >
+                                        Manage subscription
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          if (confirm(`Delete ${sub.service}? This cannot be undone.`)) {
+                                            handleDelete(sub.id)
+                                          }
+                                          setOpenMenuId(null)
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-sm text-destructive hover:bg-accent transition-colors"
+                                      >
+                                        Delete
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
+                              </>
+                            )}
+                            <button
+                              onClick={() => handleToggleCancelled(sub.id)}
+                              className={`h-9 w-9 rounded-md border-2 transition-colors flex items-center justify-center touch-manipulation shrink-0 ${
+                                sub.cancelled
+                                  ? "bg-primary border-primary"
+                                  : "border-border hover:border-primary/50 active:border-primary"
+                              }`}
+                              aria-label={sub.cancelled ? "Mark as active" : "Mark as inactive"}
                             >
-                              Manage
-                            </Button>
-                          )}
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => handleDelete(sub.id)}
-                          >
-                            Delete
-                          </Button>
+                              {sub.cancelled && (
+                                <svg
+                                  className="h-4 w-4 text-primary-foreground"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                  strokeWidth={3}
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M5 13l4 4L19 7"
+                                  />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
                         </div>
                       </div>
-                    )
-                  })}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {subscriptions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Totals</CardTitle>
+              <CardDescription>
+                Your subscription costs {activeSubscriptions.length !== subscriptions.length && `(excluding ${subscriptions.length - activeSubscriptions.length} inactive)`}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-muted-foreground">Total Monthly Cost:</span>
+                  <span className="font-semibold text-base sm:text-lg">
+                    ${totalMonthly.toFixed(2)}
+                  </span>
                 </div>
-              )}
+                <div className="flex justify-between items-center">
+                  <span className="text-sm sm:text-base text-muted-foreground">Total Yearly Cost:</span>
+                  <span className="font-semibold text-base sm:text-lg">
+                    ${totalYearly.toFixed(2)}
+                  </span>
+                </div>
+              </div>
             </CardContent>
           </Card>
-
-          {subscriptions.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Totals</CardTitle>
-                <CardDescription>
-                  Your subscription costs {activeSubscriptions.length !== subscriptions.length && `(excluding ${subscriptions.length - activeSubscriptions.length} inactive)`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Total Monthly Cost:</span>
-                    <span className="font-semibold text-lg">
-                      ${totalMonthly.toFixed(2)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Total Yearly Cost:</span>
-                    <span className="font-semibold text-lg">
-                      ${totalYearly.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
+        )}
       </div>
+    </PageShell>
   )
 }
