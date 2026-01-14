@@ -131,27 +131,34 @@ export default function MapPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto max-w-6xl py-8 px-4">
-        <p>Loading...</p>
+      <div className="container mx-auto max-w-6xl py-12 px-4">
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     )
   }
 
   if (subscriptions.length === 0) {
     return (
-      <div className="container mx-auto max-w-4xl py-8 px-4">
+      <div className="container mx-auto max-w-4xl py-12 px-4">
+        <div className="mb-8">
+          <h1 className="text-4xl font-bold tracking-tight mb-2">Subscription Map</h1>
+          <p className="text-muted-foreground">
+            Visual representation of your subscriptions
+          </p>
+        </div>
         <Card>
-          <CardHeader>
-            <CardTitle>Subscription Map</CardTitle>
-            <CardDescription>Visualize your subscriptions</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <p className="text-muted-foreground mb-4">
-              No subscriptions found. Add some subscriptions to see them on the map.
-            </p>
-            <Button asChild>
-              <Link href="/app">Go to Subscriptions</Link>
-            </Button>
+          <CardContent className="flex flex-col items-center justify-center py-20">
+            <div className="text-center space-y-4 max-w-md">
+              <h3 className="text-xl font-semibold">
+                You're all set — now add your first subscription
+              </h3>
+              <p className="text-muted-foreground">
+                Add a subscription to start visualizing where your money goes every month.
+              </p>
+              <Button asChild className="mt-4">
+                <Link href="/app">Add subscription</Link>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -159,10 +166,10 @@ export default function MapPage() {
   }
 
   return (
-      <div className="container mx-auto max-w-6xl py-8 px-4">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Subscription Map</h1>
-          <p className="text-muted-foreground">
+      <div className="container mx-auto max-w-6xl py-12 px-4">
+        <div className="mb-12">
+          <h1 className="text-4xl font-bold tracking-tight mb-2">Subscription Map</h1>
+          <p className="text-muted-foreground text-lg">
             Visual representation of your subscriptions
           </p>
         </div>
@@ -255,7 +262,7 @@ export default function MapPage() {
           </CardContent>
         </Card>
 
-        <div className="mt-6 flex justify-center">
+        <div className="mt-12 flex justify-center">
           <Button variant="outline" asChild>
             <Link href="/app">Back to Subscriptions</Link>
           </Button>

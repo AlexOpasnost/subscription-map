@@ -321,16 +321,16 @@ export default function AppPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto max-w-4xl py-8 px-4">
-        <p>Loading...</p>
+      <div className="container mx-auto max-w-4xl py-12 px-4">
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto max-w-4xl py-8 px-4">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold">Subscriptions</h1>
+    <div className="container mx-auto max-w-4xl py-12 px-4">
+      <div className="flex justify-between items-center mb-12">
+        <h1 className="text-4xl font-bold tracking-tight">Subscriptions</h1>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <Link href="/app/map">View Map</Link>
@@ -341,7 +341,7 @@ export default function AppPage() {
         </div>
       </div>
 
-        <Card className="mb-8">
+        <Card className="mb-12">
           <CardHeader>
             <CardTitle>Add Subscription</CardTitle>
             <CardDescription>Enter the details of your subscription</CardDescription>
@@ -457,19 +457,32 @@ export default function AppPage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-8">
           <Card>
             <CardHeader>
               <CardTitle>Subscriptions</CardTitle>
-              <CardDescription>Your active subscriptions</CardDescription>
+              <CardDescription>Make informed decisions about recurring expenses</CardDescription>
             </CardHeader>
             <CardContent>
               {subscriptions.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  No subscriptions yet. Add one above to get started.
-                </p>
+                <div className="py-16 text-center space-y-4">
+                  <h3 className="text-xl font-semibold">
+                    You're all set — now add your first subscription
+                  </h3>
+                  <p className="text-muted-foreground max-w-md mx-auto">
+                    Add a subscription to start visualizing where your money goes every month.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      document.getElementById("service")?.focus()
+                    }}
+                    className="mt-4"
+                  >
+                    Add subscription
+                  </Button>
+                </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {subscriptions.map((sub) => {
                     const price = sub.price_cents / 100
                     return (
@@ -489,7 +502,7 @@ export default function AppPage() {
                             )}
                             {sub.cancelled && (
                               <span className="text-xs bg-gray-200 dark:bg-gray-800 px-2 py-1 rounded">
-                                Cancelled
+                                Inactive
                               </span>
                             )}
                           </div>
@@ -501,7 +514,7 @@ export default function AppPage() {
                           <Checkbox
                             checked={sub.cancelled || false}
                             onChange={() => handleToggleCancelled(sub.id)}
-                            label="Cancelled"
+                            label="Inactive"
                           />
                           {!sub.cancelled && (
                             <Button
@@ -509,7 +522,7 @@ export default function AppPage() {
                               size="sm"
                               onClick={() => handleCancelSubscription(sub.id)}
                             >
-                              Cancel
+                              Manage
                             </Button>
                           )}
                           <Button
@@ -533,7 +546,7 @@ export default function AppPage() {
               <CardHeader>
                 <CardTitle>Totals</CardTitle>
                 <CardDescription>
-                  Your subscription costs {activeSubscriptions.length !== subscriptions.length && `(excluding ${subscriptions.length - activeSubscriptions.length} cancelled)`}
+                  Your subscription costs {activeSubscriptions.length !== subscriptions.length && `(excluding ${subscriptions.length - activeSubscriptions.length} inactive)`}
                 </CardDescription>
               </CardHeader>
               <CardContent>

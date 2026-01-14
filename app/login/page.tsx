@@ -31,15 +31,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-md py-16 px-4">
+    <div className="container mx-auto max-w-md py-24 px-4">
+      <div className="mb-12 text-center space-y-4">
+        <h1 className="text-4xl font-bold tracking-tight">
+          See all your subscriptions in one place
+        </h1>
+        <p className="text-lg text-muted-foreground">
+          Track monthly spending, spot forgotten subscriptions, and stay in control of your money.
+        </p>
+      </div>
       <Card>
-        <CardHeader>
-          <CardTitle>Sign In</CardTitle>
-          <CardDescription>
-            Enter your email to receive a magic link
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -65,7 +67,7 @@ export default function LoginPage() {
               </p>
             )}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Sending..." : "Send Magic Link"}
+              {loading ? "Sending..." : "Continue with email"}
             </Button>
           </form>
         </CardContent>
