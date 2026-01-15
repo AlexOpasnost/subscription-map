@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
@@ -124,7 +125,7 @@ export default function SubscriptionDetailsPage() {
   if (loading) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription" onSignOut={signOut} showMap={false} />
+        <HeaderBar title="Subscription" onSignOut={signOut} currentPage="detail" />
         <p className="text-muted-foreground">Loading...</p>
       </PageShell>
     )
@@ -133,7 +134,7 @@ export default function SubscriptionDetailsPage() {
   if (!subscription) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription" onSignOut={signOut} showMap={false} />
+        <HeaderBar title="Subscription" onSignOut={signOut} currentPage="detail" />
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">Subscription not found.</p>
@@ -155,15 +156,19 @@ export default function SubscriptionDetailsPage() {
   )
   const hasCancelUrl = !!catalogService?.cancelUrl
 
+  // Sanitize category for display
+  const displayCategory = subscription.category?.trim() || "—"
+
   return (
     <PageShell>
-      <HeaderBar title={subscription.service} onSignOut={signOut} showMap={false} />
+      <HeaderBar title={subscription.service} onSignOut={signOut} currentPage="detail" />
       
       <div className="space-y-6">
         <Button
           variant="ghost"
           onClick={() => router.push("/app")}
           className="w-full sm:w-auto -ml-2 sm:ml-0"
+          size="sm"
         >
           ← Back
         </Button>
@@ -172,7 +177,7 @@ export default function SubscriptionDetailsPage() {
           <CardHeader>
             <CardTitle>Details</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-5">
+          <CardContent className="space-y-4">
             <div className="text-center py-2">
               <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums mb-1">
                 ${monthlyPrice.toFixed(2)}
@@ -196,19 +201,16 @@ export default function SubscriptionDetailsPage() {
               )}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Category</span>
-                <span className="text-sm font-medium">
-                  {subscription.category || "—"}
-                </span>
+                <span className="text-sm font-medium">{displayCategory}</span>
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-sm font-medium text-muted-foreground">Status</span>
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
-                  subscription.cancelled
-                    ? "bg-muted text-muted-foreground"
-                    : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                }`}>
+                <Badge
+                  variant={subscription.cancelled ? "secondary" : "default"}
+                  className="text-xs"
+                >
                   {subscription.cancelled ? "Paused" : "Active"}
-                </span>
+                </Badge>
               </div>
             </div>
           </CardContent>

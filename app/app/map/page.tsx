@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
 import HeaderBar from "@/components/HeaderBar"
+import EmptyState from "@/components/EmptyState"
 
 type Period = "monthly" | "yearly"
 
@@ -151,7 +152,7 @@ export default function MapPage() {
   if (loading) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription Map" onSignOut={signOut} showMap={false} />
+        <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
         <p className="text-muted-foreground">Loading...</p>
       </PageShell>
     )
@@ -160,46 +161,22 @@ export default function MapPage() {
   if (subscriptions.length === 0) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription Map" onSignOut={signOut} showMap={false} />
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/app")}
-          className="w-full sm:w-auto -ml-2 sm:ml-0 mb-6"
-        >
-          ← Back
-        </Button>
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardContent className="flex flex-col items-center justify-center py-12 sm:py-20">
-            <div className="text-center space-y-4 max-w-md">
-              <h3 className="text-lg sm:text-xl font-semibold">
-                You're all set — now add your first subscription
-              </h3>
-              <p className="text-sm sm:text-base text-muted-foreground">
-                Add a subscription to start visualizing where your money goes every month.
-              </p>
-              <Button asChild className="mt-4">
-                <Link href="/app">Add subscription</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
+        <EmptyState
+          title="No subscriptions to visualize"
+          description="Add subscriptions to see them on the map."
+          ctaLabel="Go to Subscriptions"
+          onCtaClick={() => router.push("/app")}
+        />
       </PageShell>
     )
   }
 
   return (
     <PageShell>
-      <HeaderBar title="Subscription Map" onSignOut={signOut} showMap={false} />
+      <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
       
       <div className="space-y-6">
-        <Button
-          variant="ghost"
-          onClick={() => router.push("/app")}
-          className="w-full sm:w-auto -ml-2 sm:ml-0"
-        >
-          ← Back
-        </Button>
-
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardHeader>
             <CardTitle>Your Subscription Map</CardTitle>

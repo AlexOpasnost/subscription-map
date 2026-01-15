@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
 import HeaderBar from "@/components/HeaderBar"
 import SubscriptionCard from "@/components/SubscriptionCard"
-import AddSubscriptionDialog from "@/components/AddSubscriptionDialog"
+import AddSubscriptionForm from "@/components/AddSubscriptionForm"
+import EmptyState from "@/components/EmptyState"
 
 interface Subscription {
   id: string
@@ -25,7 +25,7 @@ export default function AppPage() {
   const { user, signOut } = useAuth()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
 
   const loadSubscriptions = useCallback(async () => {
     try {
@@ -71,59 +71,10 @@ export default function AppPage() {
     }
   }, 0)
 
-  const handleTogglePaused = async (id: string) => {
-    const subscription = subscriptions.find((sub) => sub.id === id)
-    if (!subscription) return
-
-    try {
-      const { error } = await supabase
-        .from("subscriptions")
-        .update({ cancelled: !subscription.cancelled })
-        .eq("id", id)
-
-      if (error) {
-        console.error(error)
-        return
-      }
-
-      setSubscriptions(
-        subscriptions.map((sub) =>
-          sub.id === id ? { ...sub, cancelled: !sub.cancelled } : sub
-        )
-      )
-    } catch (error: any) {
-      console.error(error)
-    }
-  }
-
-  const handleDelete = async (id: string) => {
-    const subscription = subscriptions.find((sub) => sub.id === id)
-    if (!subscription) return
-
-    if (!confirm(`Delete ${subscription.service}? This cannot be undone.`)) {
-      return
-    }
-
-    try {
-      const { error } = await supabase
-        .from("subscriptions")
-        .delete()
-        .eq("id", id)
-
-      if (error) {
-        console.error(error)
-        return
-      }
-
-      setSubscriptions(subscriptions.filter((sub) => sub.id !== id))
-    } catch (error: any) {
-      console.error(error)
-    }
-  }
-
   if (loading) {
     return (
       <PageShell>
+        <HeaderBar title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
         <p className="text-muted-foreground">Loading...</p>
       </PageShell>
     )
@@ -131,7 +82,7 @@ export default function AppPage() {
 
   return (
     <PageShell>
-      <HeaderBar title="Subscriptions" onSignOut={signOut} />
+      <HeaderBar title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
       
       <div className="space-y-6">
         <Card className="rounded-2xl shadow-sm border bg-card">
@@ -148,46 +99,48 @@ export default function AppPage() {
           </CardContent>
         </Card>
 
-        <Button
-          onClick={() => setDialogOpen(true)}
-          className="w-full rounded-2xl"
-          size="lg"
-        >
-          + Add subscription
-        </Button>
-
         {subscriptions.length === 0 ? (
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardContent className="py-12 text-center">
-              <p className="text-muted-foreground">
-                No subscriptions yet. Add your first one to get started.
-              </p>
-            </CardContent>
-          </Card>
+          <>
+            <EmptyState
+              title="Get started with Subscription Map"
+              description="Track and manage all your recurring subscriptions in one place."
+              bullets={[
+                "Track recurring spending",
+                "See total monthly and yearly costs",
+                "Open cancel links directly"
+              ]}
+              ctaLabel="Add your first subscription"
+              onCtaClick={() => setFormOpen(true)}
+            />
+            <AddSubscriptionForm
+              onSuccess={() => {
+                loadSubscriptions()
+                setFormOpen(false)
+              }}
+              defaultOpen={formOpen}
+            />
+          </>
         ) : (
-          <div className="space-y-3">
-            {subscriptions.map((sub) => (
-              <SubscriptionCard
-                key={sub.id}
-                id={sub.id}
-                service={sub.service}
-                plan={sub.plan}
-                price_cents={sub.price_cents}
-                period={sub.period}
-                cancelled={sub.cancelled}
-                onTogglePaused={() => handleTogglePaused(sub.id)}
-                onDelete={() => handleDelete(sub.id)}
-              />
-            ))}
-          </div>
+          <>
+            <AddSubscriptionForm onSuccess={loadSubscriptions} />
+            
+            <div className="space-y-3">
+              {subscriptions.map((sub) => (
+                <SubscriptionCard
+                  key={sub.id}
+                  id={sub.id}
+                  service={sub.service}
+                  plan={sub.plan}
+                  price_cents={sub.price_cents}
+                  period={sub.period}
+                  category={sub.category}
+                  cancelled={sub.cancelled}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
-
-      <AddSubscriptionDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSuccess={loadSubscriptions}
-      />
     </PageShell>
   )
 }
