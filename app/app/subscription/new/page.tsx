@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -31,6 +31,10 @@ export default function NewSubscriptionPage() {
   const [serviceSearch, setServiceSearch] = useState("")
   const [showServiceDropdown, setShowServiceDropdown] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<{
+    service?: string
+    price?: string
+  }>({})
   const serviceDropdownRef = useRef<HTMLDivElement>(null)
   const serviceInputRef = useRef<HTMLInputElement>(null)
 
@@ -70,6 +74,7 @@ export default function NewSubscriptionPage() {
     })
     setServiceSearch(serviceName)
     setShowServiceDropdown(false)
+    setErrors({ ...errors, service: undefined })
   }
 
   const handlePlanSelect = (planIndexStr: string) => {
@@ -85,33 +90,32 @@ export default function NewSubscriptionPage() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
+  const validateForm = (): boolean => {
+    const newErrors: { service?: string; price?: string } = {}
 
-    if (!formData.serviceName || !formData.price || !formData.category) {
-      setLoading(false)
-      return
-    }
-
-    if (formData.selectedPlanIndex === null || availablePlans.length === 0) {
-      alert("Please select a plan")
-      setLoading(false)
-      return
-    }
-
-    const selectedPlan = availablePlans[formData.selectedPlanIndex]
-    if (!selectedPlan) {
-      alert("Invalid plan selected. Please select a plan again.")
-      setLoading(false)
-      return
+    if (!formData.serviceName.trim()) {
+      newErrors.service = "Service is required"
     }
 
     const price = parseFloat(formData.price)
-    if (isNaN(price) || price <= 0) {
-      setLoading(false)
+    if (!formData.price.trim()) {
+      newErrors.price = "Price is required"
+    } else if (isNaN(price) || price <= 0) {
+      newErrors.price = "Please enter a valid price"
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!validateForm()) {
       return
     }
+
+    setLoading(true)
 
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
     
@@ -121,10 +125,15 @@ export default function NewSubscriptionPage() {
       return
     }
 
+    const price = parseFloat(formData.price)
     const priceCents = Math.round(price * 100)
     const period = formData.period === "monthly" || formData.period === "yearly" 
       ? formData.period 
       : "monthly"
+
+    const selectedPlan = formData.selectedPlanIndex !== null && availablePlans.length > 0
+      ? availablePlans[formData.selectedPlanIndex]
+      : null
 
     try {
       const { error } = await supabase
@@ -132,10 +141,10 @@ export default function NewSubscriptionPage() {
         .insert({
           user_id: authUser.id,
           service: formData.serviceName.trim(),
-          plan: selectedPlan.name.trim(),
+          plan: selectedPlan ? selectedPlan.name.trim() : null,
           price_cents: priceCents,
           period: period,
-          category: formData.category.trim(),
+          category: formData.category.trim() || null,
           cancelled: false,
         })
 
@@ -154,131 +163,163 @@ export default function NewSubscriptionPage() {
 
   return (
     <PageShell
-      title="Add Subscription"
+      title="Add subscription"
       maxWidth="2xl"
     >
-      <Card>
-        <CardHeader>
-          <CardTitle>Add Subscription</CardTitle>
-          <CardDescription>Enter the details of your subscription</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="service">Service</Label>
-              <div className="relative">
-                <Input
-                  ref={serviceInputRef}
-                  id="service"
-                  type="text"
-                  placeholder="Search for a service..."
-                  value={serviceSearch}
-                  onChange={(e) => {
-                    setServiceSearch(e.target.value)
-                    setShowServiceDropdown(true)
-                    if (!e.target.value) {
-                      setFormData({ ...formData, serviceName: "", selectedPlanIndex: null, price: "", period: "monthly" })
-                    }
-                  }}
-                  onFocus={() => setShowServiceDropdown(true)}
-                  required
-                />
-                {showServiceDropdown && filteredServices.length > 0 && (
-                  <div
-                    ref={serviceDropdownRef}
-                    className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
-                  >
-                    {filteredServices.map((service) => (
-                      <button
-                        key={service.serviceName}
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
-                        onClick={() => handleServiceSelect(service.serviceName)}
-                      >
-                        {service.serviceName}
-                      </button>
-                    ))}
-                  </div>
+      <div className="space-y-6">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/app")}
+          className="w-full sm:w-auto -ml-2 sm:ml-0"
+        >
+          ← Back
+        </Button>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Add subscription</CardTitle>
+            <CardDescription>Enter the details of your subscription</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="service">
+                  Service <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <Input
+                    ref={serviceInputRef}
+                    id="service"
+                    type="text"
+                    placeholder="Search for a service..."
+                    value={serviceSearch}
+                    onChange={(e) => {
+                      setServiceSearch(e.target.value)
+                      setShowServiceDropdown(true)
+                      if (!e.target.value) {
+                        setFormData({ ...formData, serviceName: "", selectedPlanIndex: null, price: "", period: "monthly" })
+                      }
+                      setErrors({ ...errors, service: undefined })
+                    }}
+                    onFocus={() => setShowServiceDropdown(true)}
+                    className={errors.service ? "border-destructive" : ""}
+                  />
+                  {showServiceDropdown && filteredServices.length > 0 && (
+                    <div
+                      ref={serviceDropdownRef}
+                      className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
+                    >
+                      {filteredServices.map((service) => (
+                        <button
+                          key={service.serviceName}
+                          type="button"
+                          className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
+                          onClick={() => handleServiceSelect(service.serviceName)}
+                        >
+                          {service.serviceName}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {errors.service && (
+                  <p className="text-sm text-destructive">{errors.service}</p>
                 )}
               </div>
-            </div>
 
-            {selectedService && availablePlans.length > 0 && (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan">Plan</Label>
-                <Select 
-                  value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
-                  onValueChange={handlePlanSelect}
+              {selectedService && availablePlans.length > 0 && (
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="plan">Plan</Label>
+                  <Select 
+                    value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
+                    onValueChange={handlePlanSelect}
+                  >
+                    <SelectTrigger id="plan">
+                      <SelectValue placeholder="Select a plan (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {availablePlans.map((plan, idx) => (
+                        <SelectItem key={idx.toString()} value={idx.toString()}>
+                          {plan.name} - ${plan.price.toFixed(2)}/{plan.period === "monthly" ? "mo" : "yr"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="price">
+                  Price <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={formData.price}
+                  onChange={(e) => {
+                    setFormData({ ...formData, price: e.target.value })
+                    setErrors({ ...errors, price: undefined })
+                  }}
+                  className={errors.price ? "border-destructive" : ""}
+                />
+                {errors.price && (
+                  <p className="text-sm text-destructive">{errors.price}</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="period">Period</Label>
+                <Select
+                  value={formData.period}
+                  onValueChange={(value: Period) =>
+                    setFormData({ ...formData, period: value })
+                  }
                 >
-                  <SelectTrigger id="plan">
-                    <SelectValue placeholder="Select a plan" />
+                  <SelectTrigger id="period">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {availablePlans.map((plan, idx) => (
-                      <SelectItem key={idx.toString()} value={idx.toString()}>
-                        {plan.name} - ${plan.price.toFixed(2)}/{plan.period === "monthly" ? "mo" : "yr"}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="monthly">Monthly</SelectItem>
+                    <SelectItem value="yearly">Yearly</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="price">Price</Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={formData.price}
-                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                required
-              />
-            </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="category">Category</Label>
+                <Input
+                  id="category"
+                  type="text"
+                  placeholder="e.g., Entertainment"
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                />
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="period">Period</Label>
-              <Select
-                value={formData.period}
-                onValueChange={(value: Period) =>
-                  setFormData({ ...formData, period: value })
-                }
-              >
-                <SelectTrigger id="period">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="monthly">Monthly</SelectItem>
-                  <SelectItem value="yearly">Yearly</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="category">Category</Label>
-              <Input
-                id="category"
-                type="text"
-                placeholder="e.g., Entertainment"
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="sm:col-span-2 flex gap-3">
-              <Button type="button" variant="outline" onClick={() => router.back()} className="flex-1 sm:flex-initial">
-                Cancel
-              </Button>
-              <Button type="submit" disabled={loading} className="flex-1 sm:flex-initial">
-                {loading ? "Adding..." : "Add Subscription"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="sm:col-span-2 flex flex-col sm:flex-row gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push("/app")}
+                  className="w-full sm:w-auto order-2 sm:order-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full sm:w-auto order-1 sm:order-2"
+                >
+                  {loading ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
     </PageShell>
   )
 }
