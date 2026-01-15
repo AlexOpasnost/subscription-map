@@ -4,11 +4,11 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
 import PageShell from "@/components/PageShell"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface Subscription {
   id: string
@@ -58,7 +58,7 @@ export default function SubscriptionDetailsPage() {
     loadSubscription()
   }, [user, params.id, router])
 
-  const handleToggleCancelled = async () => {
+  const handleTogglePaused = async () => {
     if (!subscription) return
 
     try {
@@ -78,7 +78,7 @@ export default function SubscriptionDetailsPage() {
     }
   }
 
-  const handleCancelSubscription = async () => {
+  const handleOpenCancelPage = () => {
     if (!subscription) return
 
     const catalogService = subscriptionCatalog.find(
@@ -94,24 +94,6 @@ export default function SubscriptionDetailsPage() {
     }
 
     window.open(cancelUrl, "_blank", "noopener,noreferrer")
-
-    if (!subscription.cancelled) {
-      try {
-        const { error } = await supabase
-          .from("subscriptions")
-          .update({ cancelled: true })
-          .eq("id", subscription.id)
-
-        if (error) {
-          console.error(error)
-          return
-        }
-
-        setSubscription({ ...subscription, cancelled: true })
-      } catch (error: any) {
-        console.error(error)
-      }
-    }
   }
 
   const handleDelete = async () => {
@@ -154,8 +136,8 @@ export default function SubscriptionDetailsPage() {
       <PageShell title="Subscription" maxWidth="2xl">
         <Card>
           <CardContent className="py-12 text-center">
-            <p className="text-muted-foreground">Subscription not found.</p>
-            <Button onClick={() => router.push("/app")} className="mt-4">
+            <p className="text-muted-foreground mb-4">Subscription not found.</p>
+            <Button onClick={() => router.push("/app")} className="w-full sm:w-auto">
               Back to Subscriptions
             </Button>
           </CardContent>
@@ -174,44 +156,55 @@ export default function SubscriptionDetailsPage() {
       maxWidth="2xl"
     >
       <div className="space-y-6">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/app")}
+          className="w-full sm:w-auto -ml-2 sm:ml-0"
+        >
+          ← Back
+        </Button>
+
         <Card>
           <CardHeader>
             <CardTitle>Details</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Monthly Cost</span>
-              <span className="text-3xl font-bold tracking-tight tabular-nums">
+          <CardContent className="space-y-5">
+            <div className="text-center py-2">
+              <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums mb-1">
                 ${monthlyPrice.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm font-medium text-muted-foreground">Yearly Cost</span>
-              <span className="text-2xl font-semibold tracking-tight tabular-nums">
-                ${yearlyPrice.toFixed(2)}
-              </span>
-            </div>
-            {subscription.plan && (
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-sm font-medium text-muted-foreground">Plan</span>
-                <span className="text-sm font-medium">{subscription.plan}</span>
               </div>
-            )}
-            <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-sm font-medium text-muted-foreground">Category</span>
-              <span className="text-sm font-medium">{subscription.category}</span>
+              <div className="text-sm text-muted-foreground">per month</div>
+              <div className="text-base text-muted-foreground mt-2">
+                ${yearlyPrice.toFixed(2)} per year
+              </div>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-sm font-medium text-muted-foreground">Billing Period</span>
-              <span className="text-sm font-medium capitalize">{subscription.period}</span>
-            </div>
-            {subscription.cancelled && (
-              <div className="pt-2 border-t">
-                <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-muted-foreground">
-                  Inactive
+
+            <div className="space-y-3 pt-4 border-t">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Billing Period</span>
+                <span className="text-sm font-medium capitalize">{subscription.period}</span>
+              </div>
+              {subscription.plan && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Plan</span>
+                  <span className="text-sm font-medium">{subscription.plan}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-muted-foreground">Category</span>
+                <span className="text-sm font-medium">{subscription.category}</span>
+              </div>
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-sm font-medium text-muted-foreground">Status</span>
+                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${
+                  subscription.cancelled
+                    ? "bg-muted text-muted-foreground"
+                    : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                }`}>
+                  {subscription.cancelled ? "Paused" : "Active"}
                 </span>
               </div>
-            )}
+            </div>
           </CardContent>
         </Card>
 
@@ -221,29 +214,29 @@ export default function SubscriptionDetailsPage() {
             <CardDescription>Manage your subscription</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="space-y-0.5">
-                <label className="text-sm font-medium">Paused</label>
+            <Button
+              variant="outline"
+              onClick={handleOpenCancelPage}
+              className="w-full"
+            >
+              Open cancel page
+            </Button>
+
+            <div className="flex items-center justify-between p-4 border rounded-lg">
+              <div className="space-y-0.5 flex-1">
+                <label className="text-sm font-medium cursor-pointer" onClick={handleTogglePaused}>
+                  Pause subscription
+                </label>
                 <p className="text-xs text-muted-foreground">
-                  Mark this subscription as inactive
+                  Temporarily mark this subscription as inactive
                 </p>
               </div>
               <Checkbox
                 checked={subscription.cancelled || false}
-                onChange={handleToggleCancelled}
+                onChange={handleTogglePaused}
                 label=""
               />
             </div>
-
-            {!subscription.cancelled && (
-              <Button
-                variant="outline"
-                onClick={handleCancelSubscription}
-                className="w-full"
-              >
-                Manage Subscription
-              </Button>
-            )}
 
             <Button
               variant="destructive"
@@ -251,18 +244,10 @@ export default function SubscriptionDetailsPage() {
               disabled={deleting}
               className="w-full"
             >
-              {deleting ? "Deleting..." : "Delete Subscription"}
+              {deleting ? "Deleting..." : "Delete subscription"}
             </Button>
           </CardContent>
         </Card>
-
-        <Button
-          variant="outline"
-          onClick={() => router.push("/app")}
-          className="w-full"
-        >
-          Back to Subscriptions
-        </Button>
       </div>
     </PageShell>
   )
