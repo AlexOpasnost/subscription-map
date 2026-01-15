@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
 import PageShell from "@/components/PageShell"
+import HeaderBar from "@/components/HeaderBar"
 import { Checkbox } from "@/components/ui/checkbox"
 
 interface Subscription {
@@ -24,7 +25,7 @@ interface Subscription {
 export default function SubscriptionDetailsPage() {
   const router = useRouter()
   const params = useParams()
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
@@ -87,9 +88,6 @@ export default function SubscriptionDetailsPage() {
     const cancelUrl = catalogService?.cancelUrl
 
     if (!cancelUrl) {
-      alert(
-        `Cancel URL not available for ${subscription.service}. Please visit the provider's website to cancel your subscription.`
-      )
       return
     }
 
@@ -125,7 +123,8 @@ export default function SubscriptionDetailsPage() {
 
   if (loading) {
     return (
-      <PageShell title="Subscription" maxWidth="2xl">
+      <PageShell>
+        <HeaderBar title="Subscription" onSignOut={signOut} showMap={false} />
         <p className="text-muted-foreground">Loading...</p>
       </PageShell>
     )
@@ -133,8 +132,9 @@ export default function SubscriptionDetailsPage() {
 
   if (!subscription) {
     return (
-      <PageShell title="Subscription" maxWidth="2xl">
-        <Card>
+      <PageShell>
+        <HeaderBar title="Subscription" onSignOut={signOut} showMap={false} />
+        <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">Subscription not found.</p>
             <Button onClick={() => router.push("/app")} className="w-full sm:w-auto">
@@ -150,11 +150,15 @@ export default function SubscriptionDetailsPage() {
   const monthlyPrice = subscription.period === "monthly" ? price : price / 12
   const yearlyPrice = subscription.period === "yearly" ? price : price * 12
 
+  const catalogService = subscriptionCatalog.find(
+    (service) => service.serviceName === subscription.service
+  )
+  const hasCancelUrl = !!catalogService?.cancelUrl
+
   return (
-    <PageShell
-      title={subscription.service}
-      maxWidth="2xl"
-    >
+    <PageShell>
+      <HeaderBar title={subscription.service} onSignOut={signOut} showMap={false} />
+      
       <div className="space-y-6">
         <Button
           variant="ghost"
@@ -164,7 +168,7 @@ export default function SubscriptionDetailsPage() {
           ← Back
         </Button>
 
-        <Card>
+        <Card className="rounded-2xl shadow-sm border bg-card">
           <CardHeader>
             <CardTitle>Details</CardTitle>
           </CardHeader>
@@ -192,7 +196,9 @@ export default function SubscriptionDetailsPage() {
               )}
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-muted-foreground">Category</span>
-                <span className="text-sm font-medium">{subscription.category}</span>
+                <span className="text-sm font-medium">
+                  {subscription.category || "—"}
+                </span>
               </div>
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-sm font-medium text-muted-foreground">Status</span>
@@ -208,19 +214,27 @@ export default function SubscriptionDetailsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="rounded-2xl shadow-sm border bg-card">
           <CardHeader>
             <CardTitle>Actions</CardTitle>
             <CardDescription>Manage your subscription</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              variant="outline"
-              onClick={handleOpenCancelPage}
-              className="w-full"
-            >
-              Open cancel page
-            </Button>
+            <div className="space-y-2">
+              <Button
+                variant="outline"
+                onClick={handleOpenCancelPage}
+                disabled={!hasCancelUrl}
+                className="w-full"
+              >
+                Open cancel page
+              </Button>
+              {!hasCancelUrl && (
+                <p className="text-xs text-muted-foreground">
+                  No cancel link available
+                </p>
+              )}
+            </div>
 
             <div className="flex items-center justify-between p-4 border rounded-lg">
               <div className="space-y-0.5 flex-1">

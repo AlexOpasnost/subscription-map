@@ -3,11 +3,12 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
+import HeaderBar from "@/components/HeaderBar"
 
 type Period = "monthly" | "yearly"
 
@@ -62,7 +63,7 @@ function getMonthlyCost(subscription: Subscription): number {
 
 export default function MapPage() {
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, signOut } = useAuth()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -149,7 +150,8 @@ export default function MapPage() {
 
   if (loading) {
     return (
-      <PageShell title="Subscription Map" maxWidth="4xl">
+      <PageShell>
+        <HeaderBar title="Subscription Map" onSignOut={signOut} showMap={false} />
         <p className="text-muted-foreground">Loading...</p>
       </PageShell>
     )
@@ -157,10 +159,8 @@ export default function MapPage() {
 
   if (subscriptions.length === 0) {
     return (
-      <PageShell
-        title="Subscription Map"
-        maxWidth="4xl"
-      >
+      <PageShell>
+        <HeaderBar title="Subscription Map" onSignOut={signOut} showMap={false} />
         <Button
           variant="ghost"
           onClick={() => router.push("/app")}
@@ -168,7 +168,7 @@ export default function MapPage() {
         >
           ← Back
         </Button>
-        <Card>
+        <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="flex flex-col items-center justify-center py-12 sm:py-20">
             <div className="text-center space-y-4 max-w-md">
               <h3 className="text-lg sm:text-xl font-semibold">
@@ -178,7 +178,7 @@ export default function MapPage() {
                 Add a subscription to start visualizing where your money goes every month.
               </p>
               <Button asChild className="mt-4">
-                <Link href="/app/subscription/new">Add subscription</Link>
+                <Link href="/app">Add subscription</Link>
               </Button>
             </div>
           </CardContent>
@@ -188,10 +188,9 @@ export default function MapPage() {
   }
 
   return (
-    <PageShell
-      title="Subscription Map"
-      maxWidth="4xl"
-    >
+    <PageShell>
+      <HeaderBar title="Subscription Map" onSignOut={signOut} showMap={false} />
+      
       <div className="space-y-6">
         <Button
           variant="ghost"
@@ -201,7 +200,7 @@ export default function MapPage() {
           ← Back
         </Button>
 
-        <Card>
+        <Card className="rounded-2xl shadow-sm border bg-card">
           <CardHeader>
             <CardTitle>Your Subscription Map</CardTitle>
           </CardHeader>
@@ -229,7 +228,7 @@ export default function MapPage() {
         </Card>
 
         {topSubscriptions.length > 0 && (
-          <Card>
+          <Card className="rounded-2xl shadow-sm border bg-card">
             <CardHeader>
               <CardTitle>Top subscriptions</CardTitle>
             </CardHeader>
@@ -251,7 +250,7 @@ export default function MapPage() {
           </Card>
         )}
 
-        <Card>
+        <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="p-3 sm:p-4">
             <div className="w-full overflow-x-auto -mx-3 sm:mx-0">
               <div className="rounded-lg border bg-card p-3 sm:p-4 min-w-0 inline-block">
