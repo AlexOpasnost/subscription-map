@@ -35,6 +35,11 @@ export function useAuth() {
 }
 
 function getAuthRedirectUrl(): string {
+  // Use window.location.origin on client for dynamic redirect (works on mobile email clients)
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/auth/callback`
+  }
+  // Fallback for SSR or when window is undefined
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
   if (siteUrl) {
     return `${siteUrl}/auth/callback`
