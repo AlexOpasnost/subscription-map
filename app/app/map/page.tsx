@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -60,6 +61,7 @@ function getMonthlyCost(subscription: Subscription): number {
 }
 
 export default function MapPage() {
+  const router = useRouter()
   const { user } = useAuth()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
@@ -87,6 +89,21 @@ export default function MapPage() {
 
     loadSubscriptions()
   }, [user])
+
+  // Calculate totals
+  const totalMonthly = subscriptions.reduce((sum, sub) => {
+    return sum + getMonthlyCost(sub)
+  }, 0)
+
+  const totalYearly = subscriptions.reduce((sum, sub) => {
+    const price = sub.price_cents / 100
+    return sub.period === "yearly" ? sum + price : sum + price * 12
+  }, 0)
+
+  // Get top 3 subscriptions by monthly cost
+  const topSubscriptions = [...subscriptions]
+    .sort((a, b) => getMonthlyCost(b) - getMonthlyCost(a))
+    .slice(0, 3)
 
   // Calculate positions for subscription circles
   const centerX = 400
@@ -132,7 +149,7 @@ export default function MapPage() {
 
   if (loading) {
     return (
-      <PageShell title="Subscription Map" maxWidth="6xl">
+      <PageShell title="Subscription Map" maxWidth="4xl">
         <p className="text-muted-foreground">Loading...</p>
       </PageShell>
     )
@@ -142,14 +159,15 @@ export default function MapPage() {
     return (
       <PageShell
         title="Subscription Map"
-        description="Visual representation of your subscriptions"
-        actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/app">Back to Subscriptions</Link>
-          </Button>
-        }
         maxWidth="4xl"
       >
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/app")}
+          className="w-full sm:w-auto -ml-2 sm:ml-0 mb-6"
+        >
+          ← Back
+        </Button>
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 sm:py-20">
             <div className="text-center space-y-4 max-w-md">
@@ -160,7 +178,7 @@ export default function MapPage() {
                 Add a subscription to start visualizing where your money goes every month.
               </p>
               <Button asChild className="mt-4">
-                <Link href="/app">Add subscription</Link>
+                <Link href="/app/subscription/new">Add subscription</Link>
               </Button>
             </div>
           </CardContent>
@@ -172,104 +190,161 @@ export default function MapPage() {
   return (
     <PageShell
       title="Subscription Map"
-      description="Visual representation of your subscriptions"
-      actions={
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/app">Back to Subscriptions</Link>
-        </Button>
-      }
-      maxWidth="6xl"
+      maxWidth="4xl"
     >
-      <Card>
-        <CardContent className="p-3 sm:p-5">
-          <div className="w-full overflow-x-auto">
-            <div className="rounded-xl border bg-card p-3 sm:p-5 min-w-0">
-              <svg
-                viewBox={`0 0 ${svgSize} ${svgSize}`}
-                preserveAspectRatio="xMidYMid meet"
-                className="w-full h-auto"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                {/* Background */}
-                <rect
-                  width={svgSize}
-                  height={svgSize}
-                  fill="transparent"
-                />
+      <div className="space-y-6">
+        <Button
+          variant="ghost"
+          onClick={() => router.push("/app")}
+          className="w-full sm:w-auto -ml-2 sm:ml-0"
+        >
+          ← Back
+        </Button>
 
-                {/* Center circle - "You" */}
-                <circle
-                  cx={centerX}
-                  cy={centerY}
-                  r={30}
-                  className="fill-gray-900 dark:fill-gray-100"
-                />
-                <text
-                  x={centerX}
-                  y={centerY + 5}
-                  textAnchor={"middle" as const}
-                  className="fill-white dark:fill-gray-900 font-semibold"
-                  fontSize="14"
-                >
-                  You
-                </text>
+        <Card>
+          <CardHeader>
+            <CardTitle>Your Subscription Map</CardTitle>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="space-y-4">
+              <div className="text-center">
+                <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums mb-1">
+                  ${totalMonthly.toFixed(2)}
+                </div>
+                <div className="text-sm text-muted-foreground">per month</div>
+              </div>
+              <div className="text-center pt-2 border-t">
+                <div className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums mb-1">
+                  ${totalYearly.toFixed(2)}
+                </div>
+                <div className="text-sm text-muted-foreground">per year</div>
+              </div>
+              <div className="text-center pt-2 border-t">
+                <p className="text-xs text-muted-foreground">
+                  Based on {subscriptions.length} active {subscriptions.length === 1 ? "subscription" : "subscriptions"}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
-                {/* Subscription circles and labels */}
-                {positions.map((pos) => {
-                  const color = getCategoryColor(pos.subscription.category)
+        {topSubscriptions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Top subscriptions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {topSubscriptions.map((sub) => {
+                  const monthlyCost = getMonthlyCost(sub)
                   return (
-                    <g key={pos.subscription.id}>
-                      {/* Subscription circle */}
-                      <circle
-                        cx={pos.x}
-                        cy={pos.y}
-                        r={pos.circleRadius}
-                        className={color}
-                        opacity="0.8"
-                      />
-                      
-                      {/* Subscription name and cost */}
-                      <text
-                        x={pos.textX}
-                        y={pos.textY - 5}
-                        textAnchor={"middle" as const}
-                        className="fill-foreground font-semibold"
-                        fontSize="12"
-                      >
-                        {pos.subscription.service}
-                      </text>
-                      <text
-                        x={pos.textX}
-                        y={pos.textY + 10}
-                        textAnchor={"middle" as const}
-                        className="fill-muted-foreground"
-                        fontSize="11"
-                      >
-                        ${pos.monthlyCost.toFixed(2)}/mo
-                      </text>
-                    </g>
+                    <div key={sub.id} className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{sub.service}</span>
+                      <span className="text-sm font-semibold tabular-nums">
+                        ${monthlyCost.toFixed(2)}/mo
+                      </span>
+                    </div>
                   )
                 })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                {/* Optional: Lines connecting center to subscriptions (light guide lines) */}
-                {positions.map((pos) => (
-                  <line
-                    key={`line-${pos.subscription.id}`}
-                    x1={centerX}
-                    y1={centerY}
-                    x2={pos.x}
-                    y2={pos.y}
-                    stroke="currentColor"
-                    className="stroke-gray-300 dark:stroke-gray-700"
-                    strokeWidth="1"
-                    opacity="0.3"
+        <Card>
+          <CardContent className="p-3 sm:p-4">
+            <div className="w-full overflow-x-auto -mx-3 sm:mx-0">
+              <div className="rounded-lg border bg-card p-3 sm:p-4 min-w-0 inline-block">
+                <svg
+                  viewBox={`0 0 ${svgSize} ${svgSize}`}
+                  preserveAspectRatio="xMidYMid meet"
+                  className="w-full h-auto min-w-[300px]"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  {/* Background */}
+                  <rect
+                    width={svgSize}
+                    height={svgSize}
+                    fill="transparent"
                   />
-                ))}
-              </svg>
+
+                  {/* Center circle - "You" */}
+                  <circle
+                    cx={centerX}
+                    cy={centerY}
+                    r={30}
+                    className="fill-gray-900 dark:fill-gray-100"
+                  />
+                  <text
+                    x={centerX}
+                    y={centerY + 5}
+                    textAnchor={"middle" as const}
+                    className="fill-white dark:fill-gray-900 font-semibold"
+                    fontSize="14"
+                  >
+                    You
+                  </text>
+
+                  {/* Subscription circles and labels */}
+                  {positions.map((pos) => {
+                    const color = getCategoryColor(pos.subscription.category)
+                    return (
+                      <g key={pos.subscription.id}>
+                        {/* Subscription circle */}
+                        <circle
+                          cx={pos.x}
+                          cy={pos.y}
+                          r={pos.circleRadius}
+                          className={color}
+                          opacity="0.8"
+                        />
+                        
+                        {/* Subscription name and cost */}
+                        <text
+                          x={pos.textX}
+                          y={pos.textY - 5}
+                          textAnchor={"middle" as const}
+                          className="fill-foreground font-semibold"
+                          fontSize="12"
+                        >
+                          {pos.subscription.service}
+                        </text>
+                        <text
+                          x={pos.textX}
+                          y={pos.textY + 10}
+                          textAnchor={"middle" as const}
+                          className="fill-muted-foreground"
+                          fontSize="11"
+                        >
+                          ${pos.monthlyCost.toFixed(2)}/mo
+                        </text>
+                      </g>
+                    )
+                  })}
+
+                  {/* Optional: Lines connecting center to subscriptions (light guide lines) */}
+                  {positions.map((pos) => (
+                    <line
+                      key={`line-${pos.subscription.id}`}
+                      x1={centerX}
+                      y1={centerY}
+                      x2={pos.x}
+                      y2={pos.y}
+                      stroke="currentColor"
+                      className="stroke-gray-300 dark:stroke-gray-700"
+                      strokeWidth="1"
+                      opacity="0.3"
+                    />
+                  ))}
+                </svg>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+            <p className="text-xs text-muted-foreground text-center mt-4">
+              This view shows where your money goes
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </PageShell>
   )
 }
