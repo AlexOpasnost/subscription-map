@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+import { daysUntilYyyyMmDd, formatRenewalCountdown } from "@/lib/renewals"
 
 interface SubscriptionCardProps {
   id: string
@@ -13,6 +15,8 @@ interface SubscriptionCardProps {
   period: "monthly" | "yearly"
   category: string
   cancelled: boolean
+  renewal_date?: string | null
+  reminder_days?: number | null
 }
 
 export default function SubscriptionCard({
@@ -23,6 +27,8 @@ export default function SubscriptionCard({
   period,
   category,
   cancelled,
+  renewal_date,
+  reminder_days,
 }: SubscriptionCardProps) {
   const router = useRouter()
   const price = price_cents / 100
@@ -35,8 +41,19 @@ export default function SubscriptionCard({
     ? displayCategory.substring(0, 20) + "..." 
     : displayCategory
 
+  const daysUntilRenewal =
+    !cancelled && renewal_date ? daysUntilYyyyMmDd(renewal_date) : null
+  const reminderWindow = reminder_days ?? 3
+  const showRenewalBadge =
+    daysUntilRenewal !== null && daysUntilRenewal >= 0 && daysUntilRenewal <= reminderWindow
+
   return (
-    <Card className="rounded-2xl shadow-sm border bg-card">
+    <Card
+      className={cn(
+        "rounded-2xl shadow-sm border bg-card transition-shadow",
+        cancelled ? "opacity-70" : "hover:shadow-md"
+      )}
+    >
       <CardContent className="p-4">
         <div className="space-y-3">
           {/* Row 1: Service name + plan badge, price right aligned */}
@@ -51,6 +68,11 @@ export default function SubscriptionCard({
                 {plan && (
                   <Badge variant="outline" className="text-xs shrink-0">
                     {plan}
+                  </Badge>
+                )}
+                {showRenewalBadge && (
+                  <Badge variant="secondary" className="text-xs shrink-0">
+                    {formatRenewalCountdown(daysUntilRenewal)}
                   </Badge>
                 )}
               </div>

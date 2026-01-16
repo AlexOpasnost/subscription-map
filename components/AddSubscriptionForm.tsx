@@ -21,15 +21,29 @@ import {
 import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
+import { useToast } from "@/components/ToastProvider"
+import { humanizeError, withTimeout } from "@/lib/humanizeError"
 
 interface AddSubscriptionFormProps {
-  onSuccess: () => void
+  onSuccess: (created?: {
+    id: string
+    service: string
+    plan: string | null
+    price_cents: number
+    period: "monthly" | "yearly"
+    category: string
+    cancelled: boolean
+    renewal_date: string | null
+    reminder_days: number
+    created_at: string
+  }) => void
   defaultOpen?: boolean
 }
 
 export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: AddSubscriptionFormProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen)
   const { user } = useAuth()
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     serviceName: "",
     selectedPlanIndex: null as number | null,
@@ -40,6 +54,11 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   const [serviceSearch, setServiceSearch] = useState("")
   const [showServiceDropdown, setShowServiceDropdown] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [submitError, setSubmitError] = useState<string>("")
+  const [touched, setTouched] = useState<{ service: boolean; price: boolean }>({
+    service: false,
+    price: false,
+  })
   const [errors, setErrors] = useState<{
     service?: string
     price?: string
@@ -56,6 +75,18 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   )
 
   const availablePlans = selectedService?.plans || []
+  const priceNumber = parseFloat(formData.price)
+  const isValidPrice = !!formData.price.trim() && !isNaN(priceNumber) && priceNumber > 0
+  const canSubmit = !!formData.serviceName.trim() && isValidPrice && !loading
+  const serviceError =
+    errors.service ?? (touched.service && !formData.serviceName.trim() ? "Service is required" : undefined)
+  const priceError =
+    errors.price ??
+    (touched.price && !formData.price.trim()
+      ? "Price is required"
+      : touched.price && !isValidPrice
+        ? "Please enter a valid price"
+        : undefined)
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -84,6 +115,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     setServiceSearch(serviceName)
     setShowServiceDropdown(false)
     setErrors({ ...errors, service: undefined })
+    setSubmitError("")
   }
 
   const handlePlanSelect = (planIndexStr: string) => {
@@ -101,6 +133,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
   const validateForm = (): boolean => {
     const newErrors: { service?: string; price?: string } = {}
+    setTouched({ service: true, price: true })
 
     if (!formData.serviceName.trim()) {
       newErrors.service = "Service is required"
@@ -119,18 +152,23 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (loading) return
     
     if (!validateForm()) {
       return
     }
 
     setLoading(true)
+    setSubmitError("")
 
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !authUser) {
-      console.error("Failed to get authenticated user:", authError)
+    if (!user) {
       setLoading(false)
+      toast({
+        title: "You’re signed out",
+        description: "Please sign in again and retry.",
+        variant: "error",
+      })
       return
     }
 
@@ -151,21 +189,26 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       .replace(/[<>]/g, "")
 
     try {
-      const { error } = await supabase
-        .from("subscriptions")
-        .insert({
-          user_id: authUser.id,
-          service: formData.serviceName.trim(),
-          plan: selectedPlan ? selectedPlan.name.trim() : null,
-          price_cents: priceCents,
-          period: period,
-          category: sanitizedCategory || null,
-          cancelled: false,
-        })
+      const { data: created, error } = await withTimeout(
+        supabase
+          .from("subscriptions")
+          .insert({
+            user_id: user.id,
+            service: formData.serviceName.trim(),
+            plan: selectedPlan ? selectedPlan.name.trim() : null,
+            price_cents: priceCents,
+            period: period,
+            category: sanitizedCategory || null,
+            cancelled: false,
+            cancel_url: selectedService?.cancelUrl ?? null,
+          })
+          .select("id,service,plan,price_cents,period,category,cancelled,renewal_date,reminder_days,created_at")
+          .single()
+      )
 
       if (error) {
-        console.error(error)
-        setLoading(false)
+        setSubmitError(humanizeError(error))
+        toast({ title: "Couldn’t add subscription", description: humanizeError(error), variant: "error" })
         return
       }
 
@@ -179,9 +222,15 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       })
       setServiceSearch("")
       setErrors({})
-      onSuccess()
+      setTouched({ service: false, price: false })
+      setIsOpen(false)
+      toast({ title: "Subscription added", variant: "success" })
+      onSuccess(created || undefined)
     } catch (error: any) {
-      console.error(error)
+      const msg = humanizeError(error)
+      setSubmitError(msg)
+      toast({ title: "Couldn’t add subscription", description: msg, variant: "error" })
+    } finally {
       setLoading(false)
     }
   }
@@ -203,6 +252,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       })
       setServiceSearch("")
       setErrors({})
+      setSubmitError("")
+      setTouched({ service: false, price: false })
     }
   }
 
@@ -234,15 +285,17 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       placeholder="Search for a service..."
                       value={serviceSearch}
                       onChange={(e) => {
-                        setServiceSearch(e.target.value)
+                        const next = e.target.value
+                        setServiceSearch(next)
+                        // Treat free-typed input as the service name (fixes “feels broken” when users don't click a dropdown item).
+                        setFormData({ ...formData, serviceName: next, selectedPlanIndex: null })
                         setShowServiceDropdown(true)
-                        if (!e.target.value) {
-                          setFormData({ ...formData, serviceName: "", selectedPlanIndex: null, price: "", period: "monthly" })
-                        }
                         setErrors({ ...errors, service: undefined })
+                        setSubmitError("")
                       }}
                       onFocus={() => setShowServiceDropdown(true)}
-                      className={errors.service ? "border-destructive" : ""}
+                      onBlur={() => setTouched((prev) => ({ ...prev, service: true }))}
+                      className={serviceError ? "border-destructive" : ""}
                     />
                     {showServiceDropdown && filteredServices.length > 0 && (
                       <div
@@ -262,8 +315,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       </div>
                     )}
                   </div>
-                  {errors.service && (
-                    <p className="text-sm text-destructive">{errors.service}</p>
+                  {serviceError && (
+                    <p className="text-sm text-destructive">{serviceError}</p>
                   )}
                 </div>
 
@@ -302,11 +355,13 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     onChange={(e) => {
                       setFormData({ ...formData, price: e.target.value })
                       setErrors({ ...errors, price: undefined })
+                      setSubmitError("")
                     }}
-                    className={errors.price ? "border-destructive" : ""}
+                    onBlur={() => setTouched((prev) => ({ ...prev, price: true }))}
+                    className={priceError ? "border-destructive" : ""}
                   />
-                  {errors.price && (
-                    <p className="text-sm text-destructive">{errors.price}</p>
+                  {priceError && (
+                    <p className="text-sm text-destructive">{priceError}</p>
                   )}
                 </div>
 
@@ -348,9 +403,14 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                 </div>
 
                 <div className="sm:col-span-2 flex justify-end gap-3 pt-2">
+                  <div className="flex-1 self-center min-h-5">
+                    {submitError ? (
+                      <p className="text-sm text-destructive">{submitError}</p>
+                    ) : null}
+                  </div>
                   <Button
                     type="submit"
-                    disabled={loading}
+                    disabled={!canSubmit}
                     className="w-full sm:w-auto"
                   >
                     {loading ? "Adding..." : "Add"}

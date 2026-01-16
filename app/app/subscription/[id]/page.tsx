@@ -5,12 +5,24 @@ import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
 import PageShell from "@/components/PageShell"
 import HeaderBar from "@/components/HeaderBar"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useToast } from "@/components/ToastProvider"
+import { humanizeError, withTimeout } from "@/lib/humanizeError"
 
 interface Subscription {
   id: string
@@ -20,6 +32,10 @@ interface Subscription {
   period: "monthly" | "yearly"
   category: string
   cancelled: boolean
+  cancel_url: string | null
+  renewal_date: string | null
+  reminder_days: number
+  notes: string | null
   created_at: string
 }
 
@@ -27,9 +43,15 @@ export default function SubscriptionDetailsPage() {
   const router = useRouter()
   const params = useParams()
   const { user, signOut } = useAuth()
+  const { toast } = useToast()
   const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
+  const [togglingPaused, setTogglingPaused] = useState(false)
+  const [savingHelper, setSavingHelper] = useState(false)
+  const [renewalDate, setRenewalDate] = useState<string>("")
+  const [reminderDays, setReminderDays] = useState<string>("3")
+  const [notes, setNotes] = useState<string>("")
 
   useEffect(() => {
     if (!user || !params.id) return
@@ -44,13 +66,26 @@ export default function SubscriptionDetailsPage() {
 
         if (error) {
           console.error(error)
+          toast({
+            title: "Couldn’t load subscription",
+            description: humanizeError(error),
+            variant: "error",
+          })
           router.push("/app")
           return
         }
 
         setSubscription(data)
+        setRenewalDate(data.renewal_date ?? "")
+        setReminderDays(String((data.reminder_days ?? 3) as number))
+        setNotes(data.notes ?? "")
       } catch (error: any) {
         console.error(error)
+        toast({
+          title: "Couldn’t load subscription",
+          description: humanizeError(error),
+          variant: "error",
+        })
         router.push("/app")
       } finally {
         setLoading(false)
@@ -62,21 +97,43 @@ export default function SubscriptionDetailsPage() {
 
   const handleTogglePaused = async () => {
     if (!subscription) return
+    if (togglingPaused) return
 
+    setTogglingPaused(true)
     try {
-      const { error } = await supabase
-        .from("subscriptions")
-        .update({ cancelled: !subscription.cancelled })
-        .eq("id", subscription.id)
+      const nextCancelled = !subscription.cancelled
+
+      const { error } = await withTimeout(
+        supabase
+          .from("subscriptions")
+          .update({ cancelled: nextCancelled })
+          .eq("id", subscription.id)
+      )
 
       if (error) {
         console.error(error)
+        toast({
+          title: "Couldn’t update subscription",
+          description: humanizeError(error),
+          variant: "error",
+        })
         return
       }
 
-      setSubscription({ ...subscription, cancelled: !subscription.cancelled })
+      setSubscription({ ...subscription, cancelled: nextCancelled })
+      toast({
+        title: nextCancelled ? "Subscription paused" : "Subscription resumed",
+        variant: "success",
+      })
     } catch (error: any) {
       console.error(error)
+      toast({
+        title: "Couldn’t update subscription",
+        description: humanizeError(error),
+        variant: "error",
+      })
+    } finally {
+      setTogglingPaused(false)
     }
   }
 
@@ -86,17 +143,73 @@ export default function SubscriptionDetailsPage() {
     const catalogService = subscriptionCatalog.find(
       (service) => service.serviceName === subscription.service
     )
-    const cancelUrl = catalogService?.cancelUrl
+    const cancelUrl = subscription.cancel_url || catalogService?.cancelUrl
 
     if (!cancelUrl) {
+      toast({ title: "No official cancel page found", variant: "error" })
       return
     }
 
     window.open(cancelUrl, "_blank", "noopener,noreferrer")
+    toast({ title: "Opening official cancel page", variant: "success" })
+  }
+
+  const handleSaveHelper = async () => {
+    if (!subscription) return
+    if (savingHelper) return
+
+    const reminder = Number(reminderDays)
+    if (![1, 3, 7, 14].includes(reminder)) {
+      toast({ title: "Invalid reminder days", variant: "error" })
+      return
+    }
+
+    setSavingHelper(true)
+    try {
+      const { error } = await withTimeout(
+        supabase
+          .from("subscriptions")
+          .update({
+            renewal_date: renewalDate.trim() ? renewalDate : null,
+            reminder_days: reminder,
+            notes: notes.trim() ? notes : null,
+          })
+          .eq("id", subscription.id)
+      )
+
+      if (error) {
+        console.error(error)
+        toast({
+          title: "Couldn’t save changes",
+          description: humanizeError(error),
+          variant: "error",
+        })
+        return
+      }
+
+      setSubscription({
+        ...subscription,
+        renewal_date: renewalDate.trim() ? renewalDate : null,
+        reminder_days: reminder,
+        notes: notes.trim() ? notes : null,
+      })
+
+      toast({ title: "Saved", variant: "success" })
+    } catch (error: any) {
+      console.error(error)
+      toast({
+        title: "Couldn’t save changes",
+        description: humanizeError(error),
+        variant: "error",
+      })
+    } finally {
+      setSavingHelper(false)
+    }
   }
 
   const handleDelete = async () => {
     if (!subscription) return
+    if (deleting) return
 
     if (!confirm(`Delete ${subscription.service}? This cannot be undone.`)) {
       return
@@ -104,20 +217,30 @@ export default function SubscriptionDetailsPage() {
 
     setDeleting(true)
     try {
-      const { error } = await supabase
-        .from("subscriptions")
-        .delete()
-        .eq("id", subscription.id)
+      const { error } = await withTimeout(
+        supabase.from("subscriptions").delete().eq("id", subscription.id)
+      )
 
       if (error) {
         console.error(error)
-        setDeleting(false)
+        toast({
+          title: "Couldn’t delete subscription",
+          description: humanizeError(error),
+          variant: "error",
+        })
         return
       }
 
+      toast({ title: "Subscription deleted", variant: "success" })
       router.push("/app")
     } catch (error: any) {
       console.error(error)
+      toast({
+        title: "Couldn’t delete subscription",
+        description: humanizeError(error),
+        variant: "error",
+      })
+    } finally {
       setDeleting(false)
     }
   }
@@ -154,7 +277,7 @@ export default function SubscriptionDetailsPage() {
   const catalogService = subscriptionCatalog.find(
     (service) => service.serviceName === subscription.service
   )
-  const hasCancelUrl = !!catalogService?.cancelUrl
+  const hasCancelUrl = !!(subscription.cancel_url || catalogService?.cancelUrl)
 
   // Sanitize category for display
   const displayCategory = subscription.category?.trim() || "—"
@@ -218,6 +341,55 @@ export default function SubscriptionDetailsPage() {
 
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardHeader>
+            <CardTitle>Renewal & reminders</CardTitle>
+            <CardDescription>Stay ahead of renewals. No automation—just helpful reminders.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="renewal-date">Next renewal</Label>
+                <Input
+                  id="renewal-date"
+                  type="date"
+                  value={renewalDate}
+                  onChange={(e) => setRenewalDate(e.target.value)}
+                  disabled={savingHelper}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="reminder-days">Reminder</Label>
+                <Select value={reminderDays} onValueChange={setReminderDays}>
+                  <SelectTrigger id="reminder-days" disabled={savingHelper}>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 day before</SelectItem>
+                    <SelectItem value="3">3 days before</SelectItem>
+                    <SelectItem value="7">7 days before</SelectItem>
+                    <SelectItem value="14">14 days before</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Anything you want to remember…"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={savingHelper}
+                />
+              </div>
+            </div>
+
+            <Button onClick={handleSaveHelper} disabled={savingHelper} className="w-full">
+              {savingHelper ? "Saving..." : "Save"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl shadow-sm border bg-card">
+          <CardHeader>
             <CardTitle>Actions</CardTitle>
             <CardDescription>Manage your subscription</CardDescription>
           </CardHeader>
@@ -229,8 +401,11 @@ export default function SubscriptionDetailsPage() {
                 disabled={!hasCancelUrl}
                 className="w-full"
               >
-                Open cancel page
+                Open official cancel page
               </Button>
+              <p className="text-xs text-muted-foreground">
+                You can cancel anytime on the official page.
+              </p>
               {!hasCancelUrl && (
                 <p className="text-xs text-muted-foreground">
                   No cancel link available
@@ -240,17 +415,19 @@ export default function SubscriptionDetailsPage() {
 
             <div className="flex items-center justify-between p-4 border rounded-lg">
               <div className="space-y-0.5 flex-1">
-                <label className="text-sm font-medium cursor-pointer" onClick={handleTogglePaused}>
+                <label className="text-sm font-medium cursor-pointer" htmlFor="pause-toggle">
                   Pause subscription
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  Temporarily mark this subscription as inactive
+                  Temporarily mark this subscription as inactive{togglingPaused ? " (saving…)" : ""}
                 </p>
               </div>
               <Checkbox
+                id="pause-toggle"
                 checked={subscription.cancelled || false}
                 onChange={handleTogglePaused}
                 label=""
+                disabled={togglingPaused}
               />
             </div>
 

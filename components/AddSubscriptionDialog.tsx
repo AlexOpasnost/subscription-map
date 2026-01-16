@@ -175,6 +175,7 @@ export default function AddSubscriptionDialog({
           period: period,
           category: formData.category.trim() || null,
           cancelled: false,
+          cancel_url: selectedService?.cancelUrl ?? null,
         })
 
       if (error) {

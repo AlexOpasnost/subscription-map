@@ -5,6 +5,17 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
 
+export function getSiteUrl(): string {
+  const env = process.env.NEXT_PUBLIC_SITE_URL
+  if (env && env.trim().length > 0) {
+    return env.replace(/\/+$/, "")
+  }
+  if (typeof window !== "undefined") {
+    return window.location.origin
+  }
+  return "http://localhost:3000"
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -28,30 +39,27 @@ export function useAuth() {
 
   const signOut = async () => {
     await supabase.auth.signOut()
-    router.push("/login")
+    router.replace("/login")
   }
 
   return { user, loading, signOut }
 }
 
-function getAuthRedirectUrl(): string {
-  // Use window.location.origin on client for dynamic redirect (works on mobile email clients)
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/auth/callback`
-  }
-  // Fallback for SSR or when window is undefined
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-  if (siteUrl) {
-    return `${siteUrl}/auth/callback`
-  }
-  return "http://localhost:3000/auth/callback"
+function getAuthRedirectUrl(pathname: "/auth/callback" | "/auth/reset"): string {
+  return `${getSiteUrl()}${pathname}`
 }
 
 export async function signInWithEmail(email: string) {
   return supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: getAuthRedirectUrl(),
+      emailRedirectTo: getAuthRedirectUrl("/auth/callback"),
     },
+  })
+}
+
+export async function sendPasswordReset(email: string) {
+  return supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: getAuthRedirectUrl("/auth/reset"),
   })
 }

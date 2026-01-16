@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,8 @@ import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
 import HeaderBar from "@/components/HeaderBar"
 import EmptyState from "@/components/EmptyState"
+import { useToast } from "@/components/ToastProvider"
+import { humanizeError, withTimeout } from "@/lib/humanizeError"
 
 type Period = "monthly" | "yearly"
 
@@ -65,8 +67,11 @@ function getMonthlyCost(subscription: Subscription): number {
 export default function MapPage() {
   const router = useRouter()
   const { user, signOut } = useAuth()
+  const { toast } = useToast()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
+  const [showMap, setShowMap] = useState(false)
+  const [loadError, setLoadError] = useState("")
 
   // Load subscriptions from Supabase
   useEffect(() => {
@@ -74,23 +79,29 @@ export default function MapPage() {
 
     const loadSubscriptions = async () => {
       try {
-        const { data, error } = await supabase
-          .from("subscriptions")
-          .select("id,service,price_cents,period,category")
-          .eq("cancelled", false) // Only show active subscriptions on map
-          .order("created_at", { ascending: false })
+        setLoadError("")
+        const { data, error } = await withTimeout(
+          supabase
+            .from("subscriptions")
+            .select("id,service,price_cents,period,category")
+            .eq("cancelled", false) // Only show active subscriptions on map
+            .order("created_at", { ascending: false })
+        )
 
         if (error) throw error
         setSubscriptions(data || [])
       } catch (error) {
         console.error("Failed to load subscriptions:", error)
+        const msg = humanizeError(error)
+        setLoadError(msg)
+        toast({ title: "Couldn’t load map data", description: msg, variant: "error" })
       } finally {
         setLoading(false)
       }
     }
 
     loadSubscriptions()
-  }, [user])
+  }, [user, toast])
 
   // Calculate totals
   const totalMonthly = subscriptions.reduce((sum, sub) => {
@@ -107,47 +118,51 @@ export default function MapPage() {
     .sort((a, b) => getMonthlyCost(b) - getMonthlyCost(a))
     .slice(0, 3)
 
-  // Calculate positions for subscription circles
+  // SVG layout constants (only used when map is shown)
   const centerX = 400
   const centerY = 400
   const radius = 250
   const svgSize = 800
 
-  // Calculate circle sizes (normalized between min and max)
-  const monthlyCosts = subscriptions.map(getMonthlyCost)
-  const minCost = Math.min(...monthlyCosts, 1)
-  const maxCost = Math.max(...monthlyCosts, 1)
-  const minRadius = 15
-  const maxRadius = 50
+  const positions: Position[] = useMemo(() => {
+    if (!showMap || subscriptions.length === 0) return []
 
-  function getCircleRadius(monthlyCost: number): number {
-    if (maxCost === minCost) return (minRadius + maxRadius) / 2
-    const normalized = (monthlyCost - minCost) / (maxCost - minCost)
-    return minRadius + normalized * (maxRadius - minRadius)
-  }
+    // Calculate circle sizes (normalized between min and max)
+    const monthlyCosts = subscriptions.map(getMonthlyCost)
+    const minCost = Math.min(...monthlyCosts, 1)
+    const maxCost = Math.max(...monthlyCosts, 1)
+    const minRadius = 15
+    const maxRadius = 50
 
-  // Calculate positions evenly distributed around the circle
-  const positions: Position[] = subscriptions.map((sub, index): Position => {
-    const angle = (index * (2 * Math.PI)) / subscriptions.length - Math.PI / 2 // Start from top
-    const monthlyCost = getMonthlyCost(sub)
-    const x = centerX + radius * Math.cos(angle)
-    const y = centerY + radius * Math.sin(angle)
-    const circleRadius = getCircleRadius(monthlyCost)
-    
-    // Text position - offset to avoid overlap with circle
-    const textX = x + (x > centerX ? circleRadius + 10 : -(circleRadius + 10))
-    const textY = y
-
-    return {
-      subscription: sub,
-      x,
-      y,
-      circleRadius,
-      textX,
-      textY,
-      monthlyCost,
+    function getCircleRadius(monthlyCost: number): number {
+      if (maxCost === minCost) return (minRadius + maxRadius) / 2
+      const normalized = (monthlyCost - minCost) / (maxCost - minCost)
+      return minRadius + normalized * (maxRadius - minRadius)
     }
-  })
+
+    // Calculate positions evenly distributed around the circle
+    return subscriptions.map((sub, index): Position => {
+      const angle = (index * (2 * Math.PI)) / subscriptions.length - Math.PI / 2 // Start from top
+      const monthlyCost = getMonthlyCost(sub)
+      const x = centerX + radius * Math.cos(angle)
+      const y = centerY + radius * Math.sin(angle)
+      const circleRadius = getCircleRadius(monthlyCost)
+
+      // Text position - offset to avoid overlap with circle
+      const textX = x + (x > centerX ? circleRadius + 10 : -(circleRadius + 10))
+      const textY = y
+
+      return {
+        subscription: sub,
+        x,
+        y,
+        circleRadius,
+        textX,
+        textY,
+        monthlyCost,
+      }
+    })
+  }, [showMap, subscriptions])
 
   if (loading) {
     return (
@@ -177,6 +192,13 @@ export default function MapPage() {
       <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
       
       <div className="space-y-6">
+          {loadError && (
+            <Card className="rounded-2xl shadow-sm border bg-card">
+              <CardContent className="p-4 text-sm text-destructive">
+                {loadError}
+              </CardContent>
+            </Card>
+          )}
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardHeader>
             <CardTitle>Your Subscription Map</CardTitle>
@@ -229,95 +251,113 @@ export default function MapPage() {
 
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="p-3 sm:p-4">
-            <div className="w-full overflow-x-auto -mx-3 sm:mx-0">
-              <div className="rounded-lg border bg-card p-3 sm:p-4 min-w-0 inline-block">
-                <svg
-                  viewBox={`0 0 ${svgSize} ${svgSize}`}
-                  preserveAspectRatio="xMidYMid meet"
-                  className="w-full h-auto min-w-[300px]"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  {/* Background */}
-                  <rect
-                    width={svgSize}
-                    height={svgSize}
-                    fill="transparent"
-                  />
-
-                  {/* Center circle - "You" */}
-                  <circle
-                    cx={centerX}
-                    cy={centerY}
-                    r={30}
-                    className="fill-gray-900 dark:fill-gray-100"
-                  />
-                  <text
-                    x={centerX}
-                    y={centerY + 5}
-                    textAnchor={"middle" as const}
-                    className="fill-white dark:fill-gray-900 font-semibold"
-                    fontSize="14"
-                  >
-                    You
-                  </text>
-
-                  {/* Subscription circles and labels */}
-                  {positions.map((pos) => {
-                    const color = getCategoryColor(pos.subscription.category)
-                    return (
-                      <g key={pos.subscription.id}>
-                        {/* Subscription circle */}
-                        <circle
-                          cx={pos.x}
-                          cy={pos.y}
-                          r={pos.circleRadius}
-                          className={color}
-                          opacity="0.8"
-                        />
-                        
-                        {/* Subscription name and cost */}
-                        <text
-                          x={pos.textX}
-                          y={pos.textY - 5}
-                          textAnchor={"middle" as const}
-                          className="fill-foreground font-semibold"
-                          fontSize="12"
-                        >
-                          {pos.subscription.service}
-                        </text>
-                        <text
-                          x={pos.textX}
-                          y={pos.textY + 10}
-                          textAnchor={"middle" as const}
-                          className="fill-muted-foreground"
-                          fontSize="11"
-                        >
-                          ${pos.monthlyCost.toFixed(2)}/mo
-                        </text>
-                      </g>
-                    )
-                  })}
-
-                  {/* Optional: Lines connecting center to subscriptions (light guide lines) */}
-                  {positions.map((pos) => (
-                    <line
-                      key={`line-${pos.subscription.id}`}
-                      x1={centerX}
-                      y1={centerY}
-                      x2={pos.x}
-                      y2={pos.y}
-                      stroke="currentColor"
-                      className="stroke-gray-300 dark:stroke-gray-700"
-                      strokeWidth="1"
-                      opacity="0.3"
-                    />
-                  ))}
-                </svg>
-              </div>
+            <div className="flex items-center justify-between gap-3 px-1 py-1">
+              <div className="text-sm font-medium">Map (optional)</div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setShowMap((v) => !v)}
+              >
+                {showMap ? "Hide map" : "Show map"}
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground text-center mt-4">
-              This view shows where your money goes
-            </p>
+
+            {showMap ? (
+              <>
+                <div className="mt-3 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Legend:</span>{" "}
+                  Circle size = monthly cost, color = category. Hover a circle to see details.
+                </div>
+
+                <div className="w-full overflow-x-auto -mx-3 sm:mx-0 mt-3">
+                  <div className="rounded-lg border bg-card p-3 sm:p-4 min-w-0 inline-block">
+                    <svg
+                      viewBox={`0 0 ${svgSize} ${svgSize}`}
+                      preserveAspectRatio="xMidYMid meet"
+                      className="w-full h-auto min-w-[300px]"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      {/* Center circle - "You" */}
+                      <circle
+                        cx={centerX}
+                        cy={centerY}
+                        r={30}
+                        className="fill-gray-900 dark:fill-gray-100"
+                      />
+                      <text
+                        x={centerX}
+                        y={centerY + 5}
+                        textAnchor={"middle" as const}
+                        className="fill-white dark:fill-gray-900 font-semibold"
+                        fontSize="14"
+                      >
+                        You
+                      </text>
+
+                      {/* Optional: Lines connecting center to subscriptions (light guide lines) */}
+                      {positions.map((pos) => (
+                        <line
+                          key={`line-${pos.subscription.id}`}
+                          x1={centerX}
+                          y1={centerY}
+                          x2={pos.x}
+                          y2={pos.y}
+                          stroke="currentColor"
+                          className="stroke-gray-300 dark:stroke-gray-700"
+                          strokeWidth="1"
+                          opacity="0.3"
+                        />
+                      ))}
+
+                      {/* Subscription circles and labels */}
+                      {positions.map((pos) => {
+                        const color = getCategoryColor(pos.subscription.category)
+                        return (
+                          <g key={pos.subscription.id}>
+                            <circle
+                              cx={pos.x}
+                              cy={pos.y}
+                              r={pos.circleRadius}
+                              className={color}
+                              opacity="0.8"
+                            >
+                              <title>
+                                {pos.subscription.service} • ${pos.monthlyCost.toFixed(2)}/mo •{" "}
+                                {pos.subscription.category || "Uncategorized"}
+                              </title>
+                            </circle>
+
+                            <text
+                              x={pos.textX}
+                              y={pos.textY - 5}
+                              textAnchor={"middle" as const}
+                              className="fill-foreground font-semibold"
+                              fontSize="12"
+                            >
+                              {pos.subscription.service}
+                            </text>
+                            <text
+                              x={pos.textX}
+                              y={pos.textY + 10}
+                              textAnchor={"middle" as const}
+                              className="fill-muted-foreground"
+                              fontSize="11"
+                            >
+                              ${pos.monthlyCost.toFixed(2)}/mo
+                            </text>
+                          </g>
+                        )
+                      })}
+                    </svg>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground text-center mt-4">
+                Hide the map if it’s not helpful—your totals above are the source of truth.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>

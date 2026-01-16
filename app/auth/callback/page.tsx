@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
+import { markSignedInToast } from "@/lib/authToast"
 
 export default function AuthCallbackPage() {
   const router = useRouter()
@@ -28,6 +29,7 @@ export default function AuthCallbackPage() {
 
           if (data.session) {
             // Success - redirect to main app
+            markSignedInToast()
             router.replace("/app")
             return
           } else {
@@ -62,6 +64,7 @@ export default function AuthCallbackPage() {
 
             if (data.session) {
               // Success - redirect to main app
+              markSignedInToast()
               router.replace("/app")
               return
             }
@@ -72,6 +75,7 @@ export default function AuthCallbackPage() {
         // This handles cases where detectSessionInUrl worked automatically
         const { data: { session } } = await supabase.auth.getSession()
         if (session) {
+          markSignedInToast()
           router.replace("/app")
           return
         }
