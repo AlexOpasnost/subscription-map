@@ -3,96 +3,58 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
-import { markSignedInToast } from "@/lib/authToast"
 
 export default function AuthCallbackPage() {
   const router = useRouter()
   const [msg, setMsg] = useState("Signing you in…")
 
   useEffect(() => {
+    let cancelled = false
+
     const handleAuthCallback = async () => {
       try {
-        // Check for code in query params (PKCE flow - modern, recommended)
         const urlParams = new URLSearchParams(window.location.search)
         const code = urlParams.get("code")
+        const tokenHash = urlParams.get("token_hash")
 
         if (code) {
-          // PKCE flow: Exchange code for session
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-          if (error) {
-            console.error("Error exchanging code for session:", error)
-            setMsg("Authentication failed. Redirecting to login…")
-            setTimeout(() => router.replace("/login"), 1000)
-            return
-          }
-
-          if (data.session) {
-            // Success - redirect to main app
-            markSignedInToast()
-            router.replace("/app")
-            return
-          } else {
-            setMsg("No session found. Redirecting to login…")
-            setTimeout(() => router.replace("/login"), 1000)
-            return
-          }
-        }
-
-        // Check for hash-based flow (implicit flow - older mobile email clients)
-        // Supabase client has detectSessionInUrl: true, so it should auto-detect
-        // But we'll also manually check and set session if needed
-        if (window.location.hash) {
-          // Parse hash parameters manually
-          const hashParams = new URLSearchParams(window.location.hash.substring(1))
-          const accessToken = hashParams.get("access_token")
-          const refreshToken = hashParams.get("refresh_token")
-
-          if (accessToken && refreshToken) {
-            // Set session manually for hash-based flow
-            const { data, error } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            })
-
-            if (error) {
-              console.error("Error setting session from hash:", error)
-              setMsg("Authentication failed. Redirecting to login…")
-              setTimeout(() => router.replace("/login"), 1000)
-              return
-            }
-
-            if (data.session) {
-              // Success - redirect to main app
-              markSignedInToast()
-              router.replace("/app")
-              return
-            }
-          }
-        }
-
-        // Also check if Supabase auto-detected the session (for hash-based flows)
-        // This handles cases where detectSessionInUrl worked automatically
-        const { data: { session } } = await supabase.auth.getSession()
-        if (session) {
-          markSignedInToast()
+          const { error } = await supabase.auth.exchangeCodeForSession(code)
+          if (error) throw error
+          router.replace("/app")
+          return
+        } else if (tokenHash) {
+          const { error } = await supabase.auth.verifyOtp({
+            type: "magiclink",
+            token_hash: tokenHash,
+          })
+          if (error) throw error
           router.replace("/app")
           return
         }
 
-        // No code or hash found - show message and redirect
-        setMsg("No authentication code found. Redirecting to login…")
-        setTimeout(() => router.replace("/login"), 1000)
-      } catch (error) {
-        console.error("Error in auth callback:", error)
-        setMsg("Authentication error. Redirecting to login…")
-        setTimeout(() => router.replace("/login"), 1000)
+        throw new Error("Missing authentication parameters.")
+      } catch (error: any) {
+        if (process.env.NODE_ENV !== "production") console.error("Error in auth callback:", error)
+
+        const description =
+          typeof error?.message === "string" && error.message.trim().length > 0
+            ? error.message
+            : "Authentication failed. Please try again."
+
+        if (!cancelled) {
+          setMsg(`Authentication failed: ${description}`)
+          // Give the user a moment to read the error before redirecting.
+          window.setTimeout(() => {
+            router.replace("/login")
+          }, 1200)
+        }
       }
     }
 
-    // Only run on client side
-    if (typeof window !== "undefined") {
-      handleAuthCallback()
+    handleAuthCallback()
+
+    return () => {
+      cancelled = true
     }
   }, [router])
 

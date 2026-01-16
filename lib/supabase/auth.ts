@@ -4,17 +4,7 @@ import { supabase } from "./client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { User } from "@supabase/supabase-js"
-
-export function getSiteUrl(): string {
-  const env = process.env.NEXT_PUBLIC_SITE_URL
-  if (env && env.trim().length > 0) {
-    return env.replace(/\/+$/, "")
-  }
-  if (typeof window !== "undefined") {
-    return window.location.origin
-  }
-  return "http://localhost:3000"
-}
+import { getSiteUrl } from "@/lib/siteUrl"
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)

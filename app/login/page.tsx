@@ -14,23 +14,24 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loadingAction, setLoadingAction] = useState<null | "password-signin" | "password-signup" | "magic-link">(null)
+  const [infoMessage, setInfoMessage] = useState<string>("")
   const router = useRouter()
   const { toast } = useToast()
 
   useEffect(() => {
     const run = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (data.session) {
-        router.replace("/app")
-      }
+      const { data, error } = await supabase.auth.getSession()
+      if (error && process.env.NODE_ENV !== "production") console.error("getSession error:", error)
+      if (data.session) router.replace("/app")
     }
 
     run()
-  }, [router])
+  }, [router, toast])
 
-  const origin = useMemo(() => {
+  const siteUrl = useMemo(() => {
     const env = process.env.NEXT_PUBLIC_SITE_URL?.trim()
-    return (env && env.length > 0 ? env : typeof window !== "undefined" ? window.location.origin : "http://localhost:3000").replace(/\/+$/, "")
+    const base = env && env.length > 0 ? env : typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"
+    return base.replace(/\/+$/, "")
   }, [])
 
   const canSubmitEmail = useMemo(() => email.trim().length > 0, [email])
@@ -42,6 +43,7 @@ export default function LoginPage() {
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loadingAction) return
+    setInfoMessage("")
 
     if (!canSubmitPassword) {
       toast({
@@ -53,23 +55,31 @@ export default function LoginPage() {
     }
 
     setLoadingAction("password-signin")
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      })
 
-    if (error) {
-      toast({ title: "Couldn’t sign in", description: error.message, variant: "error" })
+      if (error) throw error
+
+      toast({ title: "Signed in", variant: "success" })
+      router.push("/app")
+    } catch (err: any) {
+      if (process.env.NODE_ENV !== "production") console.error("signInWithPassword error:", err)
+      toast({
+        title: "Couldn’t sign in",
+        description: err?.message ?? "Something went wrong.",
+        variant: "error",
+      })
+    } finally {
       setLoadingAction(null)
-      return
     }
-
-    toast({ title: "Signed in", variant: "success" })
-    router.push("/app")
   }
 
   const handlePasswordSignUp = async () => {
     if (loadingAction) return
+    setInfoMessage("")
 
     if (!canSubmitPassword) {
       toast({
@@ -81,37 +91,46 @@ export default function LoginPage() {
     }
 
     setLoadingAction("password-signup")
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: {
-        emailRedirectTo: `${origin}/auth/callback`,
-      },
-    })
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          emailRedirectTo: `${siteUrl}/auth/callback`,
+        },
+      })
 
-    if (error) {
-      toast({ title: "Couldn’t create account", description: error.message, variant: "error" })
+      if (error) throw error
+
+      if (data.session) {
+        toast({ title: "Account created", description: "Signed in.", variant: "success" })
+        router.push("/app")
+        return
+      }
+
+      // Email confirmations enabled: Supabase returns no session.
+      setInfoMessage("Check your email to confirm")
+      toast({
+        title: "Check your email",
+        description: "Check your email to confirm",
+        variant: "success",
+      })
+    } catch (err: any) {
+      if (process.env.NODE_ENV !== "production") console.error("signUp error:", err)
+      toast({
+        title: "Couldn’t create account",
+        description: err?.message ?? "Something went wrong.",
+        variant: "error",
+      })
+    } finally {
       setLoadingAction(null)
-      return
     }
-
-    if (data.session) {
-      toast({ title: "Account created", description: "Signed in.", variant: "success" })
-      router.push("/app")
-      return
-    }
-
-    toast({
-      title: "Account created",
-      description: "Check your email to confirm your account.",
-      variant: "success",
-    })
-    setLoadingAction(null)
   }
 
   const handleMagicLink = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loadingAction) return
+    setInfoMessage("")
 
     if (!canSubmitEmail) {
       toast({ title: "Missing email", description: "Enter your email address.", variant: "error" })
@@ -119,25 +138,32 @@ export default function LoginPage() {
     }
 
     setLoadingAction("magic-link")
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: {
-        emailRedirectTo: `${origin}/auth/callback`,
-      },
-    })
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          emailRedirectTo: `${siteUrl}/auth/callback`,
+        },
+      })
 
-    if (error) {
-      toast({ title: "Couldn’t send magic link", description: error.message, variant: "error" })
+      if (error) throw error
+
+      toast({
+        title: "Magic link sent",
+        description: "Check your email to finish signing in.",
+        variant: "success",
+      })
+      setInfoMessage("Check your email to finish signing in.")
+    } catch (err: any) {
+      if (process.env.NODE_ENV !== "production") console.error("signInWithOtp error:", err)
+      toast({
+        title: "Couldn’t send magic link",
+        description: err?.message ?? "Something went wrong.",
+        variant: "error",
+      })
+    } finally {
       setLoadingAction(null)
-      return
     }
-
-    toast({
-      title: "Magic link sent",
-      description: "Check your email to finish signing in.",
-      variant: "success",
-    })
-    setLoadingAction(null)
   }
 
   return (
@@ -203,6 +229,10 @@ export default function LoginPage() {
                 >
                   {loadingAction === "password-signup" ? "Creating..." : "Create account"}
                 </Button>
+
+                {infoMessage ? (
+                  <p className="text-sm text-muted-foreground">{infoMessage}</p>
+                ) : null}
               </form>
             </TabsContent>
 
