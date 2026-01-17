@@ -1,62 +1,44 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+import { Suspense, useEffect, useRef, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
 
-export default function AuthCallbackPage() {
+function AuthCallbackInner() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const ranRef = useRef(false)
   const [msg, setMsg] = useState("Signing you in…")
 
   useEffect(() => {
-    let cancelled = false
+    if (ranRef.current) return
+    ranRef.current = true
 
     const handleAuthCallback = async () => {
       try {
-        const urlParams = new URLSearchParams(window.location.search)
-        const code = urlParams.get("code")
-        const tokenHash = urlParams.get("token_hash")
+        const code = searchParams.get("code")
 
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code)
           if (error) throw error
           router.replace("/app")
           return
-        } else if (tokenHash) {
-          const { error } = await supabase.auth.verifyOtp({
-            type: "magiclink",
-            token_hash: tokenHash,
-          })
-          if (error) throw error
-          router.replace("/app")
-          return
         }
 
-        throw new Error("Missing authentication parameters.")
+        router.replace("/login")
       } catch (error: any) {
         if (process.env.NODE_ENV !== "production") console.error("Error in auth callback:", error)
-
         const description =
           typeof error?.message === "string" && error.message.trim().length > 0
             ? error.message
             : "Authentication failed. Please try again."
-
-        if (!cancelled) {
-          setMsg(`Authentication failed: ${description}`)
-          // Give the user a moment to read the error before redirecting.
-          window.setTimeout(() => {
-            router.replace("/login")
-          }, 1200)
-        }
+        setMsg(`Authentication failed: ${description}`)
+        window.setTimeout(() => router.replace("/login"), 1200)
       }
     }
 
     handleAuthCallback()
-
-    return () => {
-      cancelled = true
-    }
-  }, [router])
+  }, [router, searchParams])
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6 bg-muted/30">
@@ -65,5 +47,22 @@ export default function AuthCallbackPage() {
         <div className="text-sm text-muted-foreground">Please wait.</div>
       </div>
     </div>
+  )
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center p-6 bg-muted/30">
+          <div className="text-center space-y-2">
+            <div className="text-lg font-semibold">Signing you in…</div>
+            <div className="text-sm text-muted-foreground">Please wait.</div>
+          </div>
+        </div>
+      }
+    >
+      <AuthCallbackInner />
+    </Suspense>
   )
 }

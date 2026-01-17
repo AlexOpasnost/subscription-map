@@ -6,14 +6,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ToastProvider"
 import { supabase } from "@/lib/supabase/client"
+import { getRedirectUrl } from "@/lib/getRedirectUrl"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
-  const [loadingAction, setLoadingAction] = useState<null | "password-signin" | "password-signup" | "magic-link">(null)
+  const [loadingAction, setLoadingAction] = useState<null | "password-signin" | "password-signup" | "google">(null)
   const [infoMessage, setInfoMessage] = useState<string>("")
   const router = useRouter()
   const { toast } = useToast()
@@ -127,41 +127,28 @@ export default function LoginPage() {
     }
   }
 
-  const handleMagicLink = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleGoogleSignIn = async () => {
     if (loadingAction) return
     setInfoMessage("")
 
-    if (!canSubmitEmail) {
-      toast({ title: "Missing email", description: "Enter your email address.", variant: "error" })
-      return
-    }
-
-    setLoadingAction("magic-link")
+    setLoadingAction("google")
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
         options: {
-          emailRedirectTo: `${siteUrl}/auth/callback`,
+          redirectTo: getRedirectUrl(),
         },
       })
 
       if (error) throw error
-
-      toast({
-        title: "Magic link sent",
-        description: "Check your email to finish signing in.",
-        variant: "success",
-      })
-      setInfoMessage("Check your email to finish signing in.")
+      // On success, Supabase redirects away to Google; no further action here.
     } catch (err: any) {
-      if (process.env.NODE_ENV !== "production") console.error("signInWithOtp error:", err)
+      if (process.env.NODE_ENV !== "production") console.error("signInWithOAuth(google) error:", err)
       toast({
-        title: "Couldn’t send magic link",
+        title: "Couldn’t continue with Google",
         description: err?.message ?? "Something went wrong.",
         variant: "error",
       })
-    } finally {
       setLoadingAction(null)
     }
   }
@@ -179,84 +166,70 @@ export default function LoginPage() {
       <Card className="rounded-2xl shadow-sm border bg-card">
         <CardHeader className="space-y-1">
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>Use a password or a magic link.</CardDescription>
+          <CardDescription>Use a password or continue with Google.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="password" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="password">Password</TabsTrigger>
-              <TabsTrigger value="magic">Magic Link</TabsTrigger>
-            </TabsList>
+          <form onSubmit={handlePasswordSignIn} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+                disabled={!!loadingAction}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                required
+                disabled={!!loadingAction}
+              />
+            </div>
 
-            <TabsContent value="password">
-              <form onSubmit={handlePasswordSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    required
-                    disabled={!!loadingAction}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                    required
-                    disabled={!!loadingAction}
-                  />
-                </div>
+            <Button type="submit" className="w-full" disabled={!!loadingAction}>
+              {loadingAction === "password-signin" ? "Signing in..." : "Sign in"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handlePasswordSignUp}
+              disabled={!!loadingAction}
+            >
+              {loadingAction === "password-signup" ? "Creating..." : "Create account"}
+            </Button>
 
-                <Button type="submit" className="w-full" disabled={!!loadingAction}>
-                  {loadingAction === "password-signin" ? "Signing in..." : "Sign in"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={handlePasswordSignUp}
-                  disabled={!!loadingAction}
-                >
-                  {loadingAction === "password-signup" ? "Creating..." : "Create account"}
-                </Button>
+            {infoMessage ? (
+              <p className="text-sm text-muted-foreground">{infoMessage}</p>
+            ) : null}
 
-                {infoMessage ? (
-                  <p className="text-sm text-muted-foreground">{infoMessage}</p>
-                ) : null}
-              </form>
-            </TabsContent>
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
 
-            <TabsContent value="magic">
-              <form onSubmit={handleMagicLink} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="magic-email">Email</Label>
-                  <Input
-                    id="magic-email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    required
-                    disabled={!!loadingAction}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={!!loadingAction}>
-                  {loadingAction === "magic-link" ? "Sending..." : "Send magic link"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={handleGoogleSignIn}
+              disabled={!!loadingAction}
+            >
+              {loadingAction === "google" ? "Redirecting..." : "Continue with Google"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>
