@@ -14,7 +14,6 @@ export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loadingAction, setLoadingAction] = useState<null | "password-signin" | "password-signup" | "google">(null)
-  const [infoMessage, setInfoMessage] = useState<string>("")
   const router = useRouter()
   const { toast } = useToast()
 
@@ -43,7 +42,6 @@ export default function LoginPage() {
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loadingAction) return
-    setInfoMessage("")
 
     if (!canSubmitPassword) {
       toast({
@@ -79,7 +77,6 @@ export default function LoginPage() {
 
   const handlePasswordSignUp = async () => {
     if (loadingAction) return
-    setInfoMessage("")
 
     if (!canSubmitPassword) {
       toast({
@@ -109,12 +106,11 @@ export default function LoginPage() {
       }
 
       // Email confirmations enabled: Supabase returns no session.
-      setInfoMessage("Check your email to confirm")
       toast({
-        title: "Check your email",
-        description: "Check your email to confirm",
+        title: "Account created — check your email to confirm.",
         variant: "success",
       })
+      router.push(`/confirm-email?email=${encodeURIComponent(email.trim())}`)
     } catch (err: any) {
       if (process.env.NODE_ENV !== "production") console.error("signUp error:", err)
       toast({
@@ -129,7 +125,6 @@ export default function LoginPage() {
 
   const handleGoogleSignIn = async () => {
     if (loadingAction) return
-    setInfoMessage("")
 
     setLoadingAction("google")
     try {
@@ -210,9 +205,9 @@ export default function LoginPage() {
               {loadingAction === "password-signup" ? "Creating..." : "Create account"}
             </Button>
 
-            {infoMessage ? (
-              <p className="text-sm text-muted-foreground">{infoMessage}</p>
-            ) : null}
+            <p className="text-sm text-muted-foreground">
+              Not registered yet? Click <span className="font-medium text-foreground">Create account</span>.
+            </p>
 
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
