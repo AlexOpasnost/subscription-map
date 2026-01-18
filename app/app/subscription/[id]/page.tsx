@@ -24,6 +24,7 @@ import HeaderBar from "@/components/HeaderBar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
+import { getCheaperRegions } from "@/lib/priceComparison"
 
 interface Subscription {
   id: string
@@ -81,7 +82,7 @@ export default function SubscriptionDetailsPage() {
         setRenewalDate(data.renewal_date ?? "")
         setReminderDays(String((data.reminder_days ?? 3) as number))
         setNotes(data.notes ?? "")
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error(error)
         toast({
           title: "Couldn’t load subscription",
@@ -95,28 +96,11 @@ export default function SubscriptionDetailsPage() {
     }
 
     loadSubscription()
-  }, [user, params.id, router])
+  }, [user, params.id, router, toast])
 
   const handleTogglePaused = async () => {
     if (!subscription) return
     if (togglingPaused) return
-
-    const actionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "ux-pre",
-        hypothesisId: "UX2",
-        location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:start",
-        message: "Toggle paused started",
-        data: { actionId, togglingPaused: true },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion agent log
 
     setTogglingPaused(true)
     try {
@@ -137,66 +121,21 @@ export default function SubscriptionDetailsPage() {
           description: humanizeError(error),
           variant: "error",
         })
-        // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: "debug-session",
-            runId: "ux-pre",
-            hypothesisId: "UX2",
-            location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:result",
-            message: "Toggle paused finished (error)",
-            data: { actionId, ok: false, errorMessage: (error as any)?.message },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion agent log
         return
       }
 
       setSubscription({ ...subscription, cancelled: nextCancelled })
       toast({
-        title: nextCancelled ? "Subscription paused" : "Subscription resumed",
+        title: nextCancelled ? "Marked as cancelled" : "Marked as active",
         variant: "success",
       })
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "ux-pre",
-          hypothesisId: "UX2",
-          location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:result",
-          message: "Toggle paused finished (success)",
-          data: { actionId, ok: true },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error)
       toast({
         title: "Couldn’t update subscription",
         description: humanizeError(error),
         variant: "error",
       })
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "ux-pre",
-          hypothesisId: "UX2",
-          location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:result",
-          message: "Toggle paused finished (exception)",
-          data: { actionId, ok: false, errorMessage: error?.message },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
     } finally {
       setTogglingPaused(false)
     }
@@ -213,21 +152,6 @@ export default function SubscriptionDetailsPage() {
 
     if (!cancelUrl) {
       toast({ title: "No official cancel page found", variant: "error" })
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "ux-pre",
-          hypothesisId: "UX3",
-          location: "app/app/subscription/[id]/page.tsx:handleOpenCancelPage",
-          message: "Open cancel page (missing URL)",
-          data: { hasCancelUrl: false },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
       return
     }
 
@@ -238,21 +162,6 @@ export default function SubscriptionDetailsPage() {
     } finally {
       setOpeningCancel(false)
     }
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "ux-pre",
-        hypothesisId: "UX3",
-        location: "app/app/subscription/[id]/page.tsx:handleOpenCancelPage",
-        message: "Open cancel page (success)",
-        data: { hasCancelUrl: true },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion agent log
   }
 
   const handleSaveHelper = async () => {
@@ -298,7 +207,7 @@ export default function SubscriptionDetailsPage() {
       })
 
       toast({ title: "Saved", variant: "success" })
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error)
       toast({
         title: "Couldn’t save changes",
@@ -319,22 +228,6 @@ export default function SubscriptionDetailsPage() {
     }
 
     setDeleting(true)
-    const actionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "ux-pre",
-        hypothesisId: "UX4",
-        location: "app/app/subscription/[id]/page.tsx:handleDelete:start",
-        message: "Delete subscription started",
-        data: { actionId },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {})
-    // #endregion agent log
     try {
       const { error } = await withTimeout(
         supabase.from("subscriptions").delete().eq("id", subscription.id)
@@ -347,63 +240,18 @@ export default function SubscriptionDetailsPage() {
           description: humanizeError(error),
           variant: "error",
         })
-        // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: "debug-session",
-            runId: "ux-pre",
-            hypothesisId: "UX4",
-            location: "app/app/subscription/[id]/page.tsx:handleDelete:result",
-            message: "Delete subscription finished (error)",
-            data: { actionId, ok: false, errorMessage: (error as any)?.message },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion agent log
         return
       }
 
       toast({ title: "Subscription deleted", variant: "success" })
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "ux-pre",
-          hypothesisId: "UX4",
-          location: "app/app/subscription/[id]/page.tsx:handleDelete:result",
-          message: "Delete subscription finished (success)",
-          data: { actionId, ok: true },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
       router.push("/app")
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error)
       toast({
         title: "Couldn’t delete subscription",
         description: humanizeError(error),
         variant: "error",
       })
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "ux-pre",
-          hypothesisId: "UX4",
-          location: "app/app/subscription/[id]/page.tsx:handleDelete:result",
-          message: "Delete subscription finished (exception)",
-          data: { actionId, ok: false, errorMessage: error?.message },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
     } finally {
       setDeleting(false)
     }
@@ -470,6 +318,7 @@ export default function SubscriptionDetailsPage() {
 
   // Sanitize category for display
   const displayCategory = subscription.category?.trim() || "—"
+  const cheaperRegions = getCheaperRegions(subscription.service)
 
   return (
     <PageShell>
@@ -521,8 +370,15 @@ export default function SubscriptionDetailsPage() {
                   variant={subscription.cancelled ? "secondary" : "default"}
                   className="text-xs"
                 >
-                  {subscription.cancelled ? "Paused" : "Active"}
+                  {subscription.cancelled ? "Cancelled" : "Active"}
                 </Badge>
+              </div>
+
+              <div className="pt-2 border-t">
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">Info only:</span> This service is often cheaper in{" "}
+                  <span className="text-foreground">{cheaperRegions.join(", ")}</span>. Pricing varies by region and can change.
+                </div>
               </div>
             </div>
           </CardContent>
@@ -571,8 +427,8 @@ export default function SubscriptionDetailsPage() {
               </div>
             </div>
 
-            <Button onClick={handleSaveHelper} disabled={savingHelper} className="w-full">
-              {savingHelper ? "Saving..." : "Save"}
+            <Button onClick={handleSaveHelper} loading={savingHelper} loadingText="Saving…" className="w-full">
+              Save
             </Button>
           </CardContent>
         </Card>
@@ -589,8 +445,10 @@ export default function SubscriptionDetailsPage() {
                 onClick={handleOpenCancelPage}
                 disabled={!hasCancelUrl || openingCancel}
                 className="w-full"
+                loading={openingCancel}
+                loadingText="Opening…"
               >
-                {openingCancel ? "Opening..." : "Open official cancel page"}
+                Open official cancel page
               </Button>
               <p className="text-xs text-muted-foreground">
                 You can cancel anytime on the official page.
@@ -605,10 +463,10 @@ export default function SubscriptionDetailsPage() {
             <div className="flex items-center justify-between p-4 border rounded-lg">
               <div className="space-y-0.5 flex-1">
                 <label className="text-sm font-medium cursor-pointer" htmlFor="pause-toggle">
-                  Pause subscription
+                  Mark as cancelled
                 </label>
                 <p className="text-xs text-muted-foreground">
-                  Temporarily mark this subscription as inactive{togglingPaused ? " (saving…)" : ""}
+                  This is for your tracking only. It doesn’t cancel anything automatically.
                 </p>
               </div>
               <Checkbox
@@ -625,8 +483,10 @@ export default function SubscriptionDetailsPage() {
               onClick={handleDelete}
               disabled={deleting}
               className="w-full"
+              loading={deleting}
+              loadingText="Deleting…"
             >
-              {deleting ? "Deleting..." : "Delete subscription"}
+              Delete subscription
             </Button>
           </CardContent>
         </Card>

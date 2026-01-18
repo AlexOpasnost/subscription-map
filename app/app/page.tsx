@@ -35,6 +35,7 @@ export default function AppPage() {
   const { toast } = useToast()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
   const [formOpen, setFormOpen] = useState(false)
 
   useEffect(() => {
@@ -43,7 +44,9 @@ export default function AppPage() {
     }
   }, [toast])
 
-  const loadSubscriptions = useCallback(async () => {
+  const loadSubscriptions = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true)
+    setLoadError("")
     try {
       const { data, error } = await withTimeout(
         supabase
@@ -53,24 +56,28 @@ export default function AppPage() {
       )
 
       if (error) {
-        console.error(error)
+        if (process.env.NODE_ENV !== "production") console.error(error)
+        const msg = humanizeError(error)
+        setLoadError(msg)
         toast({
           title: "Couldn’t load subscriptions",
-          description: humanizeError(error),
+          description: msg,
           variant: "error",
         })
         return
       }
       setSubscriptions(data || [])
-    } catch (error: any) {
-      console.error(error)
+    } catch (error: unknown) {
+      if (process.env.NODE_ENV !== "production") console.error(error)
+      const msg = humanizeError(error)
+      setLoadError(msg)
       toast({
         title: "Couldn’t load subscriptions",
-        description: humanizeError(error),
+        description: msg,
         variant: "error",
       })
     } finally {
-      setLoading(false)
+      if (!opts?.silent) setLoading(false)
     }
   }, [toast])
 
@@ -145,7 +152,43 @@ export default function AppPage() {
       <HeaderBar title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
       
       <div className="space-y-6">
+        {loadError && subscriptions.length > 0 ? (
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardContent className="p-4 sm:p-6">
+              <div className="space-y-2">
+                <div className="text-sm font-semibold">We couldn’t load your subscriptions</div>
+                <div className="text-sm text-muted-foreground">{loadError}</div>
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      if (!user) return
+                      loadSubscriptions()
+                    }}
+                  >
+                    Try again
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {loadError && subscriptions.length === 0 ? (
+          <EmptyState
+            title="We couldn’t load your subscriptions"
+            description={`${loadError} Try again in a moment.`}
+            ctaLabel="Try again"
+            onCtaClick={() => {
+              if (!user) return
+              loadSubscriptions()
+            }}
+          />
+        ) : null}
+
         {(() => {
+          if (loadError && subscriptions.length === 0) return null
           const upcoming = subscriptions
             .filter((s) => !s.cancelled && !!s.renewal_date)
             .map((s) => {
@@ -187,21 +230,23 @@ export default function AppPage() {
           )
         })()}
 
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardContent className="p-6 sm:p-8 text-center">
-            <div className="space-y-3">
-              <p className="text-sm font-medium text-muted-foreground">You spend</p>
-              <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">
-                ${totalMonthly.toFixed(2)}
+        {loadError && subscriptions.length === 0 ? null : (
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardContent className="p-6 sm:p-8 text-center">
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">You spend</p>
+                <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">
+                  ${totalMonthly.toFixed(2)}
+                </div>
+                <p className="text-base sm:text-lg text-muted-foreground">
+                  ${totalYearly.toFixed(0)} / year
+                </p>
               </div>
-              <p className="text-base sm:text-lg text-muted-foreground">
-                ${totalYearly.toFixed(0)} / year
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        {subscriptions.length === 0 ? (
+        {subscriptions.length === 0 && !loadError ? (
           <>
             <EmptyState
               title="Get started with Subscription Map"
@@ -220,20 +265,20 @@ export default function AppPage() {
                   setSubscriptions((prev) => [created, ...prev])
                 }
                 // Reconcile in background (e.g. triggers, RLS, defaults) without blocking UI.
-                loadSubscriptions()
+                loadSubscriptions({ silent: true })
                 setFormOpen(false)
               }}
               defaultOpen={formOpen}
             />
           </>
-        ) : (
+        ) : loadError && subscriptions.length === 0 ? null : (
           <>
             <AddSubscriptionForm
               onSuccess={(created) => {
                 if (created) {
                   setSubscriptions((prev) => [created, ...prev])
                 }
-                loadSubscriptions()
+                loadSubscriptions({ silent: true })
               }}
             />
             

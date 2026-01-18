@@ -3,10 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/supabase/auth";
-
-function isEmailConfirmed(user: any): boolean {
-  return !!(user?.email_confirmed_at || user?.confirmed_at);
-}
+import { isEmailConfirmed } from "@/lib/isEmailConfirmed";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -24,7 +21,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       if (!confirmed) {
         const email = typeof user.email === "string" ? user.email : "";
         const qs = email ? `?email=${encodeURIComponent(email)}` : "";
-        router.replace(`/confirm-email${qs}`);
+        router.replace(`/check-email${qs}`);
         return;
       }
     }

@@ -9,11 +9,13 @@ import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ToastProvider"
 import { supabase } from "@/lib/supabase/client"
 import { getRedirectUrl } from "@/lib/getRedirectUrl"
+import { humanizeError } from "@/lib/humanizeError"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loadingAction, setLoadingAction] = useState<null | "password-signin" | "password-signup" | "google">(null)
+  const [inlineNotice, setInlineNotice] = useState<null | { title: string; description?: string; action?: "check-email" }>(null)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -25,7 +27,7 @@ export default function LoginPage() {
     }
 
     run()
-  }, [router, toast])
+  }, [router])
 
   const siteUrl = useMemo(() => {
     const env = process.env.NEXT_PUBLIC_SITE_URL?.trim()
@@ -33,15 +35,31 @@ export default function LoginPage() {
     return base.replace(/\/+$/, "")
   }, [])
 
-  const canSubmitEmail = useMemo(() => email.trim().length > 0, [email])
   const canSubmitPassword = useMemo(
     () => email.trim().length > 0 && password.trim().length > 0,
     [email, password]
   )
 
+  const errorMessage = (err: unknown): string => {
+    if (!err) return ""
+    if (typeof err === "string") return err
+    if (err instanceof Error) return err.message ?? ""
+    if (typeof err === "object" && err !== null && "message" in err) {
+      const m = (err as { message?: unknown }).message
+      return typeof m === "string" ? m : ""
+    }
+    return ""
+  }
+
+  const isEmailNotConfirmedError = (err: unknown) => {
+    const msg = errorMessage(err).toLowerCase()
+    return msg.includes("email not confirmed") || msg.includes("confirm your email")
+  }
+
   const handlePasswordSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (loadingAction) return
+    setInlineNotice(null)
 
     if (!canSubmitPassword) {
       toast({
@@ -63,11 +81,26 @@ export default function LoginPage() {
 
       toast({ title: "Signed in", variant: "success" })
       router.push("/app")
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (process.env.NODE_ENV !== "production") console.error("signInWithPassword error:", err)
+
+      if (isEmailNotConfirmedError(err)) {
+        setInlineNotice({
+          title: "Please confirm your email to sign in",
+          description: "Check your inbox for the confirmation email. If you can’t find it, resend from the next screen.",
+          action: "check-email",
+        })
+        toast({
+          title: "Email not confirmed",
+          description: "Confirm your email first, then sign in.",
+          variant: "error",
+        })
+        return
+      }
+
       toast({
         title: "Couldn’t sign in",
-        description: err?.message ?? "Something went wrong.",
+        description: humanizeError(err),
         variant: "error",
       })
     } finally {
@@ -77,6 +110,7 @@ export default function LoginPage() {
 
   const handlePasswordSignUp = async () => {
     if (loadingAction) return
+    setInlineNotice(null)
 
     if (!canSubmitPassword) {
       toast({
@@ -106,16 +140,12 @@ export default function LoginPage() {
       }
 
       // Email confirmations enabled: Supabase returns no session.
-      toast({
-        title: "Account created — check your email to confirm.",
-        variant: "success",
-      })
-      router.push(`/confirm-email?email=${encodeURIComponent(email.trim())}`)
-    } catch (err: any) {
+      router.push(`/check-email?email=${encodeURIComponent(email.trim())}`)
+    } catch (err: unknown) {
       if (process.env.NODE_ENV !== "production") console.error("signUp error:", err)
       toast({
         title: "Couldn’t create account",
-        description: err?.message ?? "Something went wrong.",
+        description: humanizeError(err),
         variant: "error",
       })
     } finally {
@@ -125,6 +155,7 @@ export default function LoginPage() {
 
   const handleGoogleSignIn = async () => {
     if (loadingAction) return
+    setInlineNotice(null)
 
     setLoadingAction("google")
     try {
@@ -137,11 +168,11 @@ export default function LoginPage() {
 
       if (error) throw error
       // On success, Supabase redirects away to Google; no further action here.
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (process.env.NODE_ENV !== "production") console.error("signInWithOAuth(google) error:", err)
       toast({
         title: "Couldn’t continue with Google",
-        description: err?.message ?? "Something went wrong.",
+        description: humanizeError(err),
         variant: "error",
       })
       setLoadingAction(null)
@@ -164,6 +195,27 @@ export default function LoginPage() {
           <CardDescription>Use a password or continue with Google.</CardDescription>
         </CardHeader>
         <CardContent>
+          {inlineNotice ? (
+            <div className="mb-4 rounded-lg border bg-muted/40 px-4 py-3">
+              <div className="text-sm font-semibold">{inlineNotice.title}</div>
+              {inlineNotice.description ? (
+                <div className="mt-1 text-sm text-muted-foreground">{inlineNotice.description}</div>
+              ) : null}
+              {inlineNotice.action === "check-email" ? (
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => router.push(`/check-email?email=${encodeURIComponent(email.trim())}`)}
+                    disabled={!!loadingAction}
+                  >
+                    Check your email
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           <form onSubmit={handlePasswordSignIn} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -192,8 +244,14 @@ export default function LoginPage() {
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={!!loadingAction}>
-              {loadingAction === "password-signin" ? "Signing in..." : "Sign in"}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={!!loadingAction}
+              loading={loadingAction === "password-signin"}
+              loadingText="Signing in…"
+            >
+              Sign in
             </Button>
             <Button
               type="button"
@@ -201,8 +259,10 @@ export default function LoginPage() {
               className="w-full"
               onClick={handlePasswordSignUp}
               disabled={!!loadingAction}
+              loading={loadingAction === "password-signup"}
+              loadingText="Creating…"
             >
-              {loadingAction === "password-signup" ? "Creating..." : "Create account"}
+              Create account
             </Button>
 
             <p className="text-sm text-muted-foreground">
@@ -221,8 +281,10 @@ export default function LoginPage() {
               className="w-full"
               onClick={handleGoogleSignIn}
               disabled={!!loadingAction}
+              loading={loadingAction === "google"}
+              loadingText="Redirecting…"
             >
-              {loadingAction === "google" ? "Redirecting..." : "Continue with Google"}
+              Continue with Google
             </Button>
           </form>
         </CardContent>

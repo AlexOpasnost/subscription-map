@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ToastProvider"
 import { supabase } from "@/lib/supabase/client"
+import { humanizeError } from "@/lib/humanizeError"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -73,7 +74,7 @@ export default function ResetPasswordPage() {
     setSaving(true)
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) {
-      toast({ title: "Couldn’t update password", description: error.message, variant: "error" })
+      toast({ title: "Couldn’t update password", description: humanizeError(error), variant: "error" })
       setSaving(false)
       return
     }
@@ -127,8 +128,8 @@ export default function ResetPasswordPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={saving}>
-                {saving ? "Saving..." : "Save new password"}
+              <Button type="submit" className="w-full" disabled={saving} loading={saving} loadingText="Saving…">
+                Save new password
               </Button>
             </form>
           )}

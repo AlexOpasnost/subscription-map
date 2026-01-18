@@ -190,27 +190,6 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     const safeCategory = (sanitizedCategory ?? "").trim() || "Other"
 
     try {
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "pre-fix",
-          hypothesisId: "H1",
-          location: "components/AddSubscriptionForm.tsx:pre-insert",
-          message: "Computed safeCategory for subscriptions insert",
-          data: {
-            rawCategory: formData.category,
-            sanitizedCategory,
-            safeCategory,
-            willSendCategory: safeCategory,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
-
       const { data: created, error } = await withTimeout(
         supabase
           .from("subscriptions")
@@ -229,28 +208,6 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       )
 
       if (error) {
-        // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: "debug-session",
-            runId: "pre-fix",
-            hypothesisId: "H1",
-            location: "components/AddSubscriptionForm.tsx:insert-error",
-            message: "Supabase subscriptions insert returned error",
-            data: {
-              safeCategory,
-              errorMessage: (error as any)?.message,
-              errorCode: (error as any)?.code,
-              errorDetails: (error as any)?.details,
-              errorHint: (error as any)?.hint,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion agent log
-
         setSubmitError(humanizeError(error))
         toast({ title: "Couldn’t add subscription", description: humanizeError(error), variant: "error" })
         return
@@ -270,7 +227,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       setIsOpen(false)
       toast({ title: "Subscription added", variant: "success" })
       onSuccess(created || undefined)
-    } catch (error: any) {
+    } catch (error: unknown) {
       const msg = humanizeError(error)
       setSubmitError(msg)
       toast({ title: "Couldn’t add subscription", description: msg, variant: "error" })
@@ -311,7 +268,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
         onValueChange={(value) => handleOpenChange(value === "add-subscription")}
       >
         <AccordionItem value="add-subscription" className="border-none">
-          <AccordionTrigger className="px-4 py-3 hover:no-underline">
+          <AccordionTrigger className="px-4 py-3 hover:no-underline" disabled={loading}>
             <span className="text-base font-medium">+ Add subscription</span>
           </AccordionTrigger>
           <AccordionContent>
@@ -340,6 +297,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       onFocus={() => setShowServiceDropdown(true)}
                       onBlur={() => setTouched((prev) => ({ ...prev, service: true }))}
                       className={serviceError ? "border-destructive" : ""}
+                      disabled={loading}
                     />
                     {showServiceDropdown && filteredServices.length > 0 && (
                       <div
@@ -352,6 +310,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                             type="button"
                             className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
                             onClick={() => handleServiceSelect(service.serviceName)}
+                            disabled={loading}
                           >
                             {service.serviceName}
                           </button>
@@ -371,7 +330,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
                       onValueChange={handlePlanSelect}
                     >
-                      <SelectTrigger id="plan">
+                      <SelectTrigger id="plan" disabled={loading}>
                         <SelectValue placeholder="Select a plan (optional)" />
                       </SelectTrigger>
                       <SelectContent>
@@ -403,6 +362,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     }}
                     onBlur={() => setTouched((prev) => ({ ...prev, price: true }))}
                     className={priceError ? "border-destructive" : ""}
+                    disabled={loading}
                   />
                   {priceError && (
                     <p className="text-sm text-destructive">{priceError}</p>
@@ -416,8 +376,9 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     onValueChange={(value: Period) =>
                       setFormData({ ...formData, period: value })
                     }
+                    disabled={loading}
                   >
-                    <SelectTrigger id="period">
+                    <SelectTrigger id="period" disabled={loading}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -440,6 +401,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       setFormData({ ...formData, category: value })
                     }}
                     maxLength={50}
+                    disabled={loading}
                   />
                   <p className="text-xs text-muted-foreground">
                     Optional (defaults to Other). Max 50 characters.
@@ -456,8 +418,10 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     type="submit"
                     disabled={!canSubmit}
                     className="w-full sm:w-auto"
+                    loading={loading}
+                    loadingText="Adding…"
                   >
-                    {loading ? "Adding..." : "Add"}
+                    Add
                   </Button>
                 </div>
               </form>

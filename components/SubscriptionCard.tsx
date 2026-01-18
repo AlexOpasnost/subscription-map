@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { daysUntilYyyyMmDd, formatRenewalCountdown } from "@/lib/renewals"
+import { getCheaperRegions } from "@/lib/priceComparison"
 
 interface SubscriptionCardProps {
   id: string
@@ -47,6 +48,8 @@ export default function SubscriptionCard({
   const showRenewalBadge =
     daysUntilRenewal !== null && daysUntilRenewal >= 0 && daysUntilRenewal <= reminderWindow
 
+  const cheaperRegions = getCheaperRegions(service)
+
   return (
     <Card
       className={cn(
@@ -70,6 +73,12 @@ export default function SubscriptionCard({
                     {plan}
                   </Badge>
                 )}
+                <Badge
+                  variant={cancelled ? "secondary" : "default"}
+                  className="text-xs shrink-0"
+                >
+                  {cancelled ? "Cancelled" : "Active"}
+                </Badge>
                 {showRenewalBadge && (
                   <Badge variant="secondary" className="text-xs shrink-0">
                     {formatRenewalCountdown(daysUntilRenewal)}
@@ -86,18 +95,25 @@ export default function SubscriptionCard({
           </div>
 
           {/* Row 2: Metadata and status */}
-          <div className="flex items-center justify-between gap-2 pt-2 border-t">
-            <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground">
+          <div className="pt-2 border-t">
+            <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground min-w-0">
               <span>{sanitizedCategory}</span>
               <span>•</span>
               <span>${yearlyPrice.toFixed(0)}/yr</span>
+              {!cancelled && renewal_date ? (
+                <>
+                  <span>•</span>
+                  <span className="truncate">Next renewal: {renewal_date}</span>
+                </>
+              ) : null}
             </div>
-            <Badge
-              variant={cancelled ? "secondary" : "default"}
-              className="text-xs shrink-0"
-            >
-              {cancelled ? "Paused" : "Active"}
-            </Badge>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 px-3 py-2">
+            <div className="text-xs text-muted-foreground">
+              <span className="font-medium text-foreground">Info only:</span> This service is often cheaper in{" "}
+              <span className="text-foreground">{cheaperRegions.join(", ")}</span>. Pricing varies by region and can change.
+            </div>
           </div>
 
           {/* Manage button */}

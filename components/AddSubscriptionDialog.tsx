@@ -20,7 +20,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
-import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError } from "@/lib/humanizeError"
@@ -36,7 +35,6 @@ export default function AddSubscriptionDialog({
   onOpenChange,
   onSuccess,
 }: AddSubscriptionDialogProps) {
-  const { user } = useAuth()
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     serviceName: "",
@@ -175,26 +173,6 @@ export default function AddSubscriptionDialog({
         : null
       const safeCategory = (formData.category ?? "").trim() || "Other"
 
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "pre-fix",
-          hypothesisId: "H2",
-          location: "components/AddSubscriptionDialog.tsx:pre-insert",
-          message: "Computed safeCategory for subscriptions insert",
-          data: {
-            rawCategory: formData.category,
-            safeCategory,
-            willSendCategory: safeCategory,
-          },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {})
-      // #endregion agent log
-
       const { error } = await supabase
         .from("subscriptions")
         .insert({
@@ -209,28 +187,6 @@ export default function AddSubscriptionDialog({
         })
 
       if (error) {
-        // #region agent log
-        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            sessionId: "debug-session",
-            runId: "pre-fix",
-            hypothesisId: "H2",
-            location: "components/AddSubscriptionDialog.tsx:insert-error",
-            message: "Supabase subscriptions insert returned error",
-            data: {
-              safeCategory,
-              errorMessage: (error as any)?.message,
-              errorCode: (error as any)?.code,
-              errorDetails: (error as any)?.details,
-              errorHint: (error as any)?.hint,
-            },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {})
-        // #endregion agent log
-
         if (process.env.NODE_ENV !== "production") console.error(error)
         toast({
           title: "Couldn’t add subscription",
@@ -243,7 +199,7 @@ export default function AddSubscriptionDialog({
       onOpenChange(false)
       toast({ title: "Subscription added", variant: "success" })
       onSuccess()
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (process.env.NODE_ENV !== "production") console.error(error)
       toast({
         title: "Couldn’t add subscription",
@@ -287,6 +243,7 @@ export default function AddSubscriptionDialog({
                   }}
                   onFocus={() => setShowServiceDropdown(true)}
                   className={errors.service ? "border-destructive" : ""}
+                  disabled={loading}
                 />
                 {showServiceDropdown && filteredServices.length > 0 && (
                   <div
@@ -299,6 +256,7 @@ export default function AddSubscriptionDialog({
                         type="button"
                         className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
                         onClick={() => handleServiceSelect(service.serviceName)}
+                        disabled={loading}
                       >
                         {service.serviceName}
                       </button>
@@ -317,8 +275,9 @@ export default function AddSubscriptionDialog({
                 <Select 
                   value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
                   onValueChange={handlePlanSelect}
+                  disabled={loading}
                 >
-                  <SelectTrigger id="plan">
+                  <SelectTrigger id="plan" disabled={loading}>
                     <SelectValue placeholder="Select a plan (optional)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -348,6 +307,7 @@ export default function AddSubscriptionDialog({
                   setErrors({ ...errors, price: undefined })
                 }}
                 className={errors.price ? "border-destructive" : ""}
+                disabled={loading}
               />
               {errors.price && (
                 <p className="text-sm text-destructive">{errors.price}</p>
@@ -361,8 +321,9 @@ export default function AddSubscriptionDialog({
                 onValueChange={(value: Period) =>
                   setFormData({ ...formData, period: value })
                 }
+                disabled={loading}
               >
-                <SelectTrigger id="period">
+                <SelectTrigger id="period" disabled={loading}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -380,6 +341,7 @@ export default function AddSubscriptionDialog({
                 placeholder="e.g., Entertainment"
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                disabled={loading}
               />
             </div>
           </div>
@@ -388,11 +350,12 @@ export default function AddSubscriptionDialog({
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
+              disabled={loading}
             >
               Cancel
             </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Adding..." : "Add"}
+            <Button type="submit" loading={loading} loadingText="Adding…">
+              Add
             </Button>
           </DialogFooter>
         </form>

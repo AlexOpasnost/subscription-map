@@ -3,6 +3,12 @@
 import { Suspense, useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { supabase } from "@/lib/supabase/client"
+import { humanizeError } from "@/lib/humanizeError"
+
+function shouldShowEmailConfirmed(type: string | null): boolean {
+  // Supabase confirmation links typically include a `type` query param (e.g. `signup`).
+  return type === "signup" || type === "invite"
+}
 
 function AuthCallbackInner() {
   const router = useRouter()
@@ -17,23 +23,25 @@ function AuthCallbackInner() {
     const handleAuthCallback = async () => {
       try {
         const code = searchParams.get("code")
+        const type = searchParams.get("type")
 
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code)
           if (error) throw error
-          router.replace("/app")
+          router.replace(shouldShowEmailConfirmed(type) ? "/email-confirmed" : "/app")
           return
         }
 
         router.replace("/login")
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (process.env.NODE_ENV !== "production") console.error("Error in auth callback:", error)
-        const description =
-          typeof error?.message === "string" && error.message.trim().length > 0
-            ? error.message
-            : "Authentication failed. Please try again."
-        setMsg(`Authentication failed: ${description}`)
+        setMsg("We couldn’t finish signing you in.")
         window.setTimeout(() => router.replace("/login"), 1200)
+        // Use toast-like phrasing without leaking raw provider errors.
+        const friendly = humanizeError(error)
+        if (friendly && friendly !== "Something went wrong. Please try again.") {
+          setMsg(`We couldn’t finish signing you in. ${friendly}`)
+        }
       }
     }
 
