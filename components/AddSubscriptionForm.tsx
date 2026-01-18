@@ -187,8 +187,30 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       .trim()
       .substring(0, 50)
       .replace(/[<>]/g, "")
+    const safeCategory = (sanitizedCategory ?? "").trim() || "Other"
 
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "pre-fix",
+          hypothesisId: "H1",
+          location: "components/AddSubscriptionForm.tsx:pre-insert",
+          message: "Computed safeCategory for subscriptions insert",
+          data: {
+            rawCategory: formData.category,
+            sanitizedCategory,
+            safeCategory,
+            willSendCategory: safeCategory,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
+
       const { data: created, error } = await withTimeout(
         supabase
           .from("subscriptions")
@@ -198,7 +220,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
             plan: selectedPlan ? selectedPlan.name.trim() : null,
             price_cents: priceCents,
             period: period,
-            category: sanitizedCategory || null,
+            category: safeCategory,
             cancelled: false,
             cancel_url: selectedService?.cancelUrl ?? null,
           })
@@ -207,6 +229,28 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       )
 
       if (error) {
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "pre-fix",
+            hypothesisId: "H1",
+            location: "components/AddSubscriptionForm.tsx:insert-error",
+            message: "Supabase subscriptions insert returned error",
+            data: {
+              safeCategory,
+              errorMessage: (error as any)?.message,
+              errorCode: (error as any)?.code,
+              errorDetails: (error as any)?.details,
+              errorHint: (error as any)?.hint,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion agent log
+
         setSubmitError(humanizeError(error))
         toast({ title: "Couldn’t add subscription", description: humanizeError(error), variant: "error" })
         return
@@ -398,7 +442,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     maxLength={50}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Optional. Max 50 characters.
+                    Optional (defaults to Other). Max 50 characters.
                   </p>
                 </div>
 

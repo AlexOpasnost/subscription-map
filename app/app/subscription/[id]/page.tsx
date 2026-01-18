@@ -102,11 +102,12 @@ export default function SubscriptionDetailsPage() {
     setTogglingPaused(true)
     try {
       const nextCancelled = !subscription.cancelled
+      const safeCategory = (subscription.category ?? "").trim() || "Other"
 
       const { error } = await withTimeout(
         supabase
           .from("subscriptions")
-          .update({ cancelled: nextCancelled })
+          .update({ cancelled: nextCancelled, category: safeCategory })
           .eq("id", subscription.id)
       )
 
@@ -166,6 +167,7 @@ export default function SubscriptionDetailsPage() {
 
     setSavingHelper(true)
     try {
+      const safeCategory = (subscription.category ?? "").trim() || "Other"
       const { error } = await withTimeout(
         supabase
           .from("subscriptions")
@@ -173,6 +175,7 @@ export default function SubscriptionDetailsPage() {
             renewal_date: renewalDate.trim() ? renewalDate : null,
             reminder_days: reminder,
             notes: notes.trim() ? notes : null,
+            category: safeCategory,
           })
           .eq("id", subscription.id)
       )

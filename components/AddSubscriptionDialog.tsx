@@ -163,8 +163,29 @@ export default function AddSubscriptionDialog({
     const selectedPlan = formData.selectedPlanIndex !== null && availablePlans.length > 0
       ? availablePlans[formData.selectedPlanIndex]
       : null
+    const safeCategory = (formData.category ?? "").trim() || "Other"
 
     try {
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "pre-fix",
+          hypothesisId: "H2",
+          location: "components/AddSubscriptionDialog.tsx:pre-insert",
+          message: "Computed safeCategory for subscriptions insert",
+          data: {
+            rawCategory: formData.category,
+            safeCategory,
+            willSendCategory: safeCategory,
+          },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
+
       const { error } = await supabase
         .from("subscriptions")
         .insert({
@@ -173,12 +194,34 @@ export default function AddSubscriptionDialog({
           plan: selectedPlan ? selectedPlan.name.trim() : null,
           price_cents: priceCents,
           period: period,
-          category: formData.category.trim() || null,
+          category: safeCategory,
           cancelled: false,
           cancel_url: selectedService?.cancelUrl ?? null,
         })
 
       if (error) {
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "pre-fix",
+            hypothesisId: "H2",
+            location: "components/AddSubscriptionDialog.tsx:insert-error",
+            message: "Supabase subscriptions insert returned error",
+            data: {
+              safeCategory,
+              errorMessage: (error as any)?.message,
+              errorCode: (error as any)?.code,
+              errorDetails: (error as any)?.details,
+              errorHint: (error as any)?.hint,
+            },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion agent log
+
         console.error(error)
         setLoading(false)
         return
