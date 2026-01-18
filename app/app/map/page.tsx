@@ -12,6 +12,7 @@ import HeaderBar from "@/components/HeaderBar"
 import EmptyState from "@/components/EmptyState"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type Period = "monthly" | "yearly"
 
@@ -200,7 +201,33 @@ export default function MapPage() {
     return (
       <PageShell>
         <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="space-y-6">
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardHeader>
+              <CardTitle>Subscription Map</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="space-y-4">
+                <div className="text-center space-y-2">
+                  <Skeleton className="h-10 w-40 mx-auto" />
+                  <Skeleton className="h-4 w-24 mx-auto" />
+                </div>
+                <div className="pt-2 border-t text-center space-y-2">
+                  <Skeleton className="h-8 w-32 mx-auto" />
+                  <Skeleton className="h-4 w-20 mx-auto" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardContent className="p-6">
+              <Skeleton className="h-4 w-40" />
+              <Skeleton className="h-56 w-full mt-4" />
+              <p className="text-xs text-muted-foreground text-center mt-3">Loading map…</p>
+            </CardContent>
+          </Card>
+        </div>
       </PageShell>
     )
   }

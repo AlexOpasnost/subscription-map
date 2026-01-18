@@ -22,6 +22,8 @@ import {
 import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
+import { useToast } from "@/components/ToastProvider"
+import { humanizeError } from "@/lib/humanizeError"
 
 interface AddSubscriptionDialogProps {
   open: boolean
@@ -35,6 +37,7 @@ export default function AddSubscriptionDialog({
   onSuccess,
 }: AddSubscriptionDialogProps) {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     serviceName: "",
     selectedPlanIndex: null as number | null,
@@ -139,6 +142,8 @@ export default function AddSubscriptionDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (loading) return
     
     if (!validateForm()) {
       return
@@ -146,26 +151,30 @@ export default function AddSubscriptionDialog({
 
     setLoading(true)
 
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
-    
-    if (authError || !authUser) {
-      console.error("Failed to get authenticated user:", authError)
-      setLoading(false)
-      return
-    }
-
-    const price = parseFloat(formData.price)
-    const priceCents = Math.round(price * 100)
-    const period = formData.period === "monthly" || formData.period === "yearly" 
-      ? formData.period 
-      : "monthly"
-
-    const selectedPlan = formData.selectedPlanIndex !== null && availablePlans.length > 0
-      ? availablePlans[formData.selectedPlanIndex]
-      : null
-    const safeCategory = (formData.category ?? "").trim() || "Other"
-
     try {
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser()
+
+      if (authError || !authUser) {
+        if (process.env.NODE_ENV !== "production") console.error("Failed to get authenticated user:", authError)
+        toast({
+          title: "You’re signed out",
+          description: "Please sign in again and retry.",
+          variant: "error",
+        })
+        return
+      }
+
+      const price = parseFloat(formData.price)
+      const priceCents = Math.round(price * 100)
+      const period = formData.period === "monthly" || formData.period === "yearly" 
+        ? formData.period 
+        : "monthly"
+
+      const selectedPlan = formData.selectedPlanIndex !== null && availablePlans.length > 0
+        ? availablePlans[formData.selectedPlanIndex]
+        : null
+      const safeCategory = (formData.category ?? "").trim() || "Other"
+
       // #region agent log
       fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
         method: "POST",
@@ -222,15 +231,26 @@ export default function AddSubscriptionDialog({
         }).catch(() => {})
         // #endregion agent log
 
-        console.error(error)
-        setLoading(false)
+        if (process.env.NODE_ENV !== "production") console.error(error)
+        toast({
+          title: "Couldn’t add subscription",
+          description: humanizeError(error),
+          variant: "error",
+        })
         return
       }
 
       onOpenChange(false)
+      toast({ title: "Subscription added", variant: "success" })
       onSuccess()
     } catch (error: any) {
-      console.error(error)
+      if (process.env.NODE_ENV !== "production") console.error(error)
+      toast({
+        title: "Couldn’t add subscription",
+        description: humanizeError(error),
+        variant: "error",
+      })
+    } finally {
       setLoading(false)
     }
   }

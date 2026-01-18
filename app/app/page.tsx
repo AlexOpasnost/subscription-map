@@ -15,6 +15,7 @@ import { consumeSignedInToast } from "@/lib/authToast"
 import { daysUntilYyyyMmDd, formatRenewalCountdown } from "@/lib/renewals"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 
 interface Subscription {
   id: string
@@ -102,7 +103,39 @@ export default function AppPage() {
     return (
       <PageShell>
         <HeaderBar title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="space-y-6">
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardContent className="p-6 sm:p-8">
+              <div className="space-y-3 text-center">
+                <Skeleton className="h-4 w-24 mx-auto" />
+                <Skeleton className="h-12 w-40 mx-auto" />
+                <Skeleton className="h-5 w-28 mx-auto" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-3">
+            {[0, 1, 2].map((i) => (
+              <Card key={i} className="rounded-2xl shadow-sm border bg-card">
+                <CardContent className="p-4">
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-2 flex-1 min-w-0">
+                        <Skeleton className="h-5 w-40" />
+                        <Skeleton className="h-4 w-24" />
+                      </div>
+                      <div className="space-y-2 text-right shrink-0">
+                        <Skeleton className="h-6 w-20 ml-auto" />
+                        <Skeleton className="h-3 w-10 ml-auto" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-8 w-28" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </PageShell>
     )
   }

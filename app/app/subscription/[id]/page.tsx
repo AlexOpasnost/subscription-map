@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -48,6 +49,7 @@ export default function SubscriptionDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState(false)
   const [togglingPaused, setTogglingPaused] = useState(false)
+  const [openingCancel, setOpeningCancel] = useState(false)
   const [savingHelper, setSavingHelper] = useState(false)
   const [renewalDate, setRenewalDate] = useState<string>("")
   const [reminderDays, setReminderDays] = useState<string>("3")
@@ -202,6 +204,7 @@ export default function SubscriptionDetailsPage() {
 
   const handleOpenCancelPage = () => {
     if (!subscription) return
+    if (openingCancel) return
 
     const catalogService = subscriptionCatalog.find(
       (service) => service.serviceName === subscription.service
@@ -228,8 +231,13 @@ export default function SubscriptionDetailsPage() {
       return
     }
 
-    window.open(cancelUrl, "_blank", "noopener,noreferrer")
-    toast({ title: "Opening official cancel page", variant: "success" })
+    setOpeningCancel(true)
+    try {
+      window.open(cancelUrl, "_blank", "noopener,noreferrer")
+      toast({ title: "Opening official cancel page", variant: "success" })
+    } finally {
+      setOpeningCancel(false)
+    }
     // #region agent log
     fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
       method: "POST",
@@ -405,7 +413,32 @@ export default function SubscriptionDetailsPage() {
     return (
       <PageShell>
         <HeaderBar title="Subscription" onSignOut={signOut} currentPage="detail" />
-        <p className="text-muted-foreground">Loading...</p>
+        <div className="space-y-6">
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardHeader>
+              <CardTitle>Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-12 w-40 mx-auto" />
+              <Skeleton className="h-4 w-28 mx-auto" />
+              <Skeleton className="h-4 w-32 mx-auto" />
+              <div className="pt-4 border-t space-y-3">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl shadow-sm border bg-card">
+            <CardHeader>
+              <CardTitle>Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-14 w-full" />
+              <Skeleton className="h-9 w-full" />
+            </CardContent>
+          </Card>
+        </div>
       </PageShell>
     )
   }
@@ -554,10 +587,10 @@ export default function SubscriptionDetailsPage() {
               <Button
                 variant="outline"
                 onClick={handleOpenCancelPage}
-                disabled={!hasCancelUrl}
+                disabled={!hasCancelUrl || openingCancel}
                 className="w-full"
               >
-                Open official cancel page
+                {openingCancel ? "Opening..." : "Open official cancel page"}
               </Button>
               <p className="text-xs text-muted-foreground">
                 You can cancel anytime on the official page.
