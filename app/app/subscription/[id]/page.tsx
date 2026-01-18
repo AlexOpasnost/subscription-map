@@ -99,6 +99,23 @@ export default function SubscriptionDetailsPage() {
     if (!subscription) return
     if (togglingPaused) return
 
+    const actionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "ux-pre",
+        hypothesisId: "UX2",
+        location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:start",
+        message: "Toggle paused started",
+        data: { actionId, togglingPaused: true },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion agent log
+
     setTogglingPaused(true)
     try {
       const nextCancelled = !subscription.cancelled
@@ -118,6 +135,21 @@ export default function SubscriptionDetailsPage() {
           description: humanizeError(error),
           variant: "error",
         })
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "ux-pre",
+            hypothesisId: "UX2",
+            location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:result",
+            message: "Toggle paused finished (error)",
+            data: { actionId, ok: false, errorMessage: (error as any)?.message },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion agent log
         return
       }
 
@@ -126,6 +158,21 @@ export default function SubscriptionDetailsPage() {
         title: nextCancelled ? "Subscription paused" : "Subscription resumed",
         variant: "success",
       })
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "ux-pre",
+          hypothesisId: "UX2",
+          location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:result",
+          message: "Toggle paused finished (success)",
+          data: { actionId, ok: true },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     } catch (error: any) {
       console.error(error)
       toast({
@@ -133,6 +180,21 @@ export default function SubscriptionDetailsPage() {
         description: humanizeError(error),
         variant: "error",
       })
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "ux-pre",
+          hypothesisId: "UX2",
+          location: "app/app/subscription/[id]/page.tsx:handleTogglePaused:result",
+          message: "Toggle paused finished (exception)",
+          data: { actionId, ok: false, errorMessage: error?.message },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     } finally {
       setTogglingPaused(false)
     }
@@ -148,11 +210,41 @@ export default function SubscriptionDetailsPage() {
 
     if (!cancelUrl) {
       toast({ title: "No official cancel page found", variant: "error" })
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "ux-pre",
+          hypothesisId: "UX3",
+          location: "app/app/subscription/[id]/page.tsx:handleOpenCancelPage",
+          message: "Open cancel page (missing URL)",
+          data: { hasCancelUrl: false },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
       return
     }
 
     window.open(cancelUrl, "_blank", "noopener,noreferrer")
     toast({ title: "Opening official cancel page", variant: "success" })
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "ux-pre",
+        hypothesisId: "UX3",
+        location: "app/app/subscription/[id]/page.tsx:handleOpenCancelPage",
+        message: "Open cancel page (success)",
+        data: { hasCancelUrl: true },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion agent log
   }
 
   const handleSaveHelper = async () => {
@@ -219,6 +311,22 @@ export default function SubscriptionDetailsPage() {
     }
 
     setDeleting(true)
+    const actionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    // #region agent log
+    fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: "debug-session",
+        runId: "ux-pre",
+        hypothesisId: "UX4",
+        location: "app/app/subscription/[id]/page.tsx:handleDelete:start",
+        message: "Delete subscription started",
+        data: { actionId },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {})
+    // #endregion agent log
     try {
       const { error } = await withTimeout(
         supabase.from("subscriptions").delete().eq("id", subscription.id)
@@ -231,10 +339,40 @@ export default function SubscriptionDetailsPage() {
           description: humanizeError(error),
           variant: "error",
         })
+        // #region agent log
+        fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: "debug-session",
+            runId: "ux-pre",
+            hypothesisId: "UX4",
+            location: "app/app/subscription/[id]/page.tsx:handleDelete:result",
+            message: "Delete subscription finished (error)",
+            data: { actionId, ok: false, errorMessage: (error as any)?.message },
+            timestamp: Date.now(),
+          }),
+        }).catch(() => {})
+        // #endregion agent log
         return
       }
 
       toast({ title: "Subscription deleted", variant: "success" })
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "ux-pre",
+          hypothesisId: "UX4",
+          location: "app/app/subscription/[id]/page.tsx:handleDelete:result",
+          message: "Delete subscription finished (success)",
+          data: { actionId, ok: true },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
       router.push("/app")
     } catch (error: any) {
       console.error(error)
@@ -243,6 +381,21 @@ export default function SubscriptionDetailsPage() {
         description: humanizeError(error),
         variant: "error",
       })
+      // #region agent log
+      fetch("http://127.0.0.1:7242/ingest/e501abb8-1b8e-4ef7-ae4a-663587bd0188", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: "debug-session",
+          runId: "ux-pre",
+          hypothesisId: "UX4",
+          location: "app/app/subscription/[id]/page.tsx:handleDelete:result",
+          message: "Delete subscription finished (exception)",
+          data: { actionId, ok: false, errorMessage: error?.message },
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
+      // #endregion agent log
     } finally {
       setDeleting(false)
     }

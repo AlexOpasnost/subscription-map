@@ -64,14 +64,34 @@ function getMonthlyCost(subscription: Subscription): number {
   return subscription.period === "monthly" ? price : price / 12
 }
 
+function truncateLabel(s: string, maxLen: number): string {
+  const trimmed = s.trim()
+  if (trimmed.length <= maxLen) return trimmed
+  return `${trimmed.slice(0, Math.max(0, maxLen - 1))}…`
+}
+
 export default function MapPage() {
   const router = useRouter()
   const { user, signOut } = useAuth()
   const { toast } = useToast()
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
-  const [showMap, setShowMap] = useState(false)
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(max-width: 640px)").matches : false
+  )
+  const [showMap, setShowMap] = useState(() =>
+    typeof window !== "undefined" ? window.matchMedia("(min-width: 768px)").matches : false
+  )
   const [loadError, setLoadError] = useState("")
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const mq = window.matchMedia("(max-width: 640px)")
+    const onChange = () => setIsMobile(mq.matches)
+    onChange()
+    mq.addEventListener("change", onChange)
+    return () => mq.removeEventListener("change", onChange)
+  }, [])
 
   // Load subscriptions from Supabase
   useEffect(() => {
@@ -118,6 +138,18 @@ export default function MapPage() {
     .sort((a, b) => getMonthlyCost(b) - getMonthlyCost(a))
     .slice(0, 3)
 
+  const mapSubscriptions = useMemo(() => {
+    const maxItems = isMobile ? 6 : 8
+    return [...subscriptions]
+      .sort((a, b) => getMonthlyCost(b) - getMonthlyCost(a))
+      .slice(0, maxItems)
+  }, [subscriptions, isMobile])
+
+  const labeledIds = useMemo(() => {
+    const labelCount = isMobile ? 3 : 5
+    return new Set(mapSubscriptions.slice(0, labelCount).map((s) => s.id))
+  }, [mapSubscriptions, isMobile])
+
   // SVG layout constants (only used when map is shown)
   const centerX = 400
   const centerY = 400
@@ -125,10 +157,10 @@ export default function MapPage() {
   const svgSize = 800
 
   const positions: Position[] = useMemo(() => {
-    if (!showMap || subscriptions.length === 0) return []
+    if (!showMap || mapSubscriptions.length === 0) return []
 
     // Calculate circle sizes (normalized between min and max)
-    const monthlyCosts = subscriptions.map(getMonthlyCost)
+    const monthlyCosts = mapSubscriptions.map(getMonthlyCost)
     const minCost = Math.min(...monthlyCosts, 1)
     const maxCost = Math.max(...monthlyCosts, 1)
     const minRadius = 15
@@ -141,8 +173,8 @@ export default function MapPage() {
     }
 
     // Calculate positions evenly distributed around the circle
-    return subscriptions.map((sub, index): Position => {
-      const angle = (index * (2 * Math.PI)) / subscriptions.length - Math.PI / 2 // Start from top
+    return mapSubscriptions.map((sub, index): Position => {
+      const angle = (index * (2 * Math.PI)) / mapSubscriptions.length - Math.PI / 2 // Start from top
       const monthlyCost = getMonthlyCost(sub)
       const x = centerX + radius * Math.cos(angle)
       const y = centerY + radius * Math.sin(angle)
@@ -162,7 +194,7 @@ export default function MapPage() {
         monthlyCost,
       }
     })
-  }, [showMap, subscriptions])
+  }, [showMap, mapSubscriptions])
 
   if (loading) {
     return (
@@ -252,7 +284,7 @@ export default function MapPage() {
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="p-3 sm:p-4">
             <div className="flex items-center justify-between gap-3 px-1 py-1">
-              <div className="text-sm font-medium">Map (optional)</div>
+              <div className="text-sm font-medium">Map</div>
               <Button
                 type="button"
                 variant="outline"
@@ -266,16 +298,16 @@ export default function MapPage() {
             {showMap ? (
               <>
                 <div className="mt-3 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Legend:</span>{" "}
-                  Circle size = monthly cost, color = category. Hover a circle to see details.
+                  <span className="font-medium text-foreground">This view highlights your biggest recurring costs.</span>{" "}
+                  Tap a circle to open details. Circle size = monthly cost, color = category.
                 </div>
 
-                <div className="w-full overflow-x-auto -mx-3 sm:mx-0 mt-3">
-                  <div className="rounded-lg border bg-card p-3 sm:p-4 min-w-0 inline-block">
+                <div className="w-full overflow-hidden mt-3">
+                  <div className="rounded-lg border bg-card p-3 sm:p-4">
                     <svg
                       viewBox={`0 0 ${svgSize} ${svgSize}`}
                       preserveAspectRatio="xMidYMid meet"
-                      className="w-full h-auto min-w-[300px]"
+                      className="w-full h-auto"
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       {/* Center circle - "You" */}
@@ -313,8 +345,23 @@ export default function MapPage() {
                       {/* Subscription circles and labels */}
                       {positions.map((pos) => {
                         const color = getCategoryColor(pos.subscription.category)
+                        const isLabeled = labeledIds.has(pos.subscription.id)
+                        const labelMax = isMobile ? 10 : 14
+                        const serviceLabel = truncateLabel(pos.subscription.service, labelMax)
                         return (
-                          <g key={pos.subscription.id}>
+                          <g
+                            key={pos.subscription.id}
+                            className="cursor-pointer"
+                            role="link"
+                            tabIndex={0}
+                            onClick={() => router.push(`/app/subscription/${pos.subscription.id}`)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault()
+                                router.push(`/app/subscription/${pos.subscription.id}`)
+                              }
+                            }}
+                          >
                             <circle
                               cx={pos.x}
                               cy={pos.y}
@@ -328,24 +375,28 @@ export default function MapPage() {
                               </title>
                             </circle>
 
-                            <text
-                              x={pos.textX}
-                              y={pos.textY - 5}
-                              textAnchor={"middle" as const}
-                              className="fill-foreground font-semibold"
-                              fontSize="12"
-                            >
-                              {pos.subscription.service}
-                            </text>
-                            <text
-                              x={pos.textX}
-                              y={pos.textY + 10}
-                              textAnchor={"middle" as const}
-                              className="fill-muted-foreground"
-                              fontSize="11"
-                            >
-                              ${pos.monthlyCost.toFixed(2)}/mo
-                            </text>
+                            {isLabeled ? (
+                              <>
+                                <text
+                                  x={pos.textX}
+                                  y={pos.textY - 5}
+                                  textAnchor={"middle" as const}
+                                  className="fill-foreground font-semibold"
+                                  fontSize={isMobile ? "11" : "12"}
+                                >
+                                  {serviceLabel}
+                                </text>
+                                <text
+                                  x={pos.textX}
+                                  y={pos.textY + 10}
+                                  textAnchor={"middle" as const}
+                                  className="fill-muted-foreground"
+                                  fontSize={isMobile ? "10" : "11"}
+                                >
+                                  ${pos.monthlyCost.toFixed(2)}/mo
+                                </text>
+                              </>
+                            ) : null}
                           </g>
                         )
                       })}
@@ -355,7 +406,7 @@ export default function MapPage() {
               </>
             ) : (
               <p className="text-xs text-muted-foreground text-center mt-4">
-                Hide the map if it’s not helpful—your totals above are the source of truth.
+                The map is optional. Show it when you want a quick view of your biggest recurring costs.
               </p>
             )}
           </CardContent>
