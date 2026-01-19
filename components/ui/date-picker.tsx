@@ -64,11 +64,11 @@ export function DatePicker({
         side="bottom"
         sideOffset={8}
         collisionPadding={16}
-        className="w-auto min-w-[var(--radix-popover-trigger-width)] p-0"
+        className="z-50 w-auto p-0"
       >
         <div className="p-3">
           <Calendar
-            className="rounded-md border p-0"
+            className="rounded-md border"
             mode="single"
             selected={selected}
             onSelect={(d) => {
