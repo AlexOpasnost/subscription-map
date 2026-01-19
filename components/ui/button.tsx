@@ -62,9 +62,9 @@ function Button({
   const Comp = canSlot ? SafeSlot : "button"
 
   if (asChild && !canSlot && process.env.NODE_ENV !== "production") {
-    console.warn(
-      "[ui/Button] `asChild` expects exactly one child element. Falling back to a native <button> to avoid a crash."
-    )
+    console.error("[ui/Button] Invalid `asChild` child; falling back to <button> to avoid a crash.", {
+      count: normalizedChildren.length,
+    })
   }
 
   const isDisabled = !!disabled || (!canSlot && isLoading)

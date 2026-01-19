@@ -27,6 +27,16 @@ export function SafeSlot({
       only
     )
 
+  if (
+    process.env.NODE_ENV !== "production" &&
+    (count !== 1 || !only || !React.isValidElement(only) || only.type === React.Fragment)
+  ) {
+    console.error("[SafeSlot] Invalid `asChild` child shape; wrapping in <span>.", {
+      count,
+      childType: React.isValidElement(only) ? only.type : typeof only,
+    })
+  }
+
   return <RadixSlot {...props}>{safeChild}</RadixSlot>
 }
 
