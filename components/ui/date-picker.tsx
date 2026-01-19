@@ -59,20 +59,29 @@ export function DatePicker({
           {label}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0" align="start">
-        <Calendar
-          mode="single"
-          selected={selected}
-          onSelect={(d) => {
-            if (!d) {
-              onChange(null)
-              return
-            }
-            // Store as ISO YYYY-MM-DD (never locale-formatted strings).
-            onChange(format(d, "yyyy-MM-dd"))
-          }}
-          initialFocus
-        />
+      <PopoverContent
+        align="start"
+        side="bottom"
+        sideOffset={8}
+        collisionPadding={16}
+        className="w-auto min-w-[var(--radix-popover-trigger-width)] p-0"
+      >
+        <div className="p-3">
+          <Calendar
+            className="rounded-md border p-0"
+            mode="single"
+            selected={selected}
+            onSelect={(d) => {
+              if (!d) {
+                onChange(null)
+                return
+              }
+              // Store as ISO YYYY-MM-DD (never locale-formatted strings).
+              onChange(format(d, "yyyy-MM-dd"))
+            }}
+            initialFocus
+          />
+        </div>
       </PopoverContent>
     </Popover>
   )
