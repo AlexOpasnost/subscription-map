@@ -5,10 +5,10 @@ import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   Select,
   SelectContent,
@@ -393,11 +393,10 @@ export default function SubscriptionDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="renewal-date">Next renewal</Label>
-                <Input
+                <DatePicker
                   id="renewal-date"
-                  type="date"
                   value={renewalDate}
-                  onChange={(e) => setRenewalDate(e.target.value)}
+                  onChange={(nextIso) => setRenewalDate(nextIso ?? "")}
                   disabled={savingHelper}
                 />
               </div>

@@ -13,6 +13,7 @@ import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
 import { consumeSignedInToast } from "@/lib/authToast"
 import { daysUntilYyyyMmDd, formatRenewalCountdown } from "@/lib/renewals"
+import { formatDisplayDate } from "@/lib/formatDisplayDate"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -216,7 +217,8 @@ export default function AppPage() {
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">{sub.service}</div>
                         <div className="text-xs text-muted-foreground">
-                          {sub.renewal_date} • {formatRenewalCountdown(daysUntil as number)}
+                          {(formatDisplayDate(sub.renewal_date) ?? sub.renewal_date) as string} •{" "}
+                          {formatRenewalCountdown(daysUntil as number)}
                         </div>
                       </div>
                       <Button asChild size="sm" variant="outline" className="shrink-0">

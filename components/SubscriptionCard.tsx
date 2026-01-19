@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { daysUntilYyyyMmDd, formatRenewalCountdown } from "@/lib/renewals"
 import { getCheaperRegions } from "@/lib/priceComparison"
+import { formatDisplayDate } from "@/lib/formatDisplayDate"
 
 interface SubscriptionCardProps {
   id: string
@@ -103,7 +104,9 @@ export default function SubscriptionCard({
               {!cancelled && renewal_date ? (
                 <>
                   <span>•</span>
-                  <span className="truncate">Next renewal: {renewal_date}</span>
+                  <span className="truncate">
+                    Next renewal: {formatDisplayDate(renewal_date) ?? renewal_date}
+                  </span>
                 </>
               ) : null}
             </div>
