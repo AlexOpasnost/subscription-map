@@ -5,10 +5,10 @@ import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
   Select,
   SelectContent,
@@ -39,6 +39,15 @@ interface Subscription {
   reminder_days: number
   notes: string | null
   created_at: string
+}
+
+function normalizeIsoYyyyMmDd(value: string | null | undefined): string {
+  const s = (value ?? "").trim()
+  if (!s) return ""
+  // If Supabase ever returns an ISO timestamp (e.g. 2026-01-01T00:00:00.000Z),
+  // normalize it to YYYY-MM-DD for the native date input.
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s)
+  return m ? m[1] : ""
 }
 
 export default function SubscriptionDetailsPage() {
@@ -79,7 +88,7 @@ export default function SubscriptionDetailsPage() {
         }
 
         setSubscription(data)
-        setRenewalDate(data.renewal_date ?? "")
+        setRenewalDate(normalizeIsoYyyyMmDd(data.renewal_date))
         setReminderDays(String((data.reminder_days ?? 3) as number))
         setNotes(data.notes ?? "")
       } catch (error: unknown) {
@@ -181,7 +190,7 @@ export default function SubscriptionDetailsPage() {
         supabase
           .from("subscriptions")
           .update({
-            renewal_date: renewalDate.trim() ? renewalDate : null,
+            renewal_date: renewalDate || null,
             reminder_days: reminder,
             notes: notes.trim() ? notes : null,
             category: safeCategory,
@@ -201,7 +210,7 @@ export default function SubscriptionDetailsPage() {
 
       setSubscription({
         ...subscription,
-        renewal_date: renewalDate.trim() ? renewalDate : null,
+        renewal_date: renewalDate || null,
         reminder_days: reminder,
         notes: notes.trim() ? notes : null,
       })
@@ -393,10 +402,11 @@ export default function SubscriptionDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="renewal-date">Next renewal</Label>
-                <DatePicker
+                <Input
                   id="renewal-date"
+                  type="date"
                   value={renewalDate}
-                  onChange={(nextIso) => setRenewalDate(nextIso ?? "")}
+                  onChange={(e) => setRenewalDate(e.target.value)}
                   disabled={savingHelper}
                 />
               </div>
