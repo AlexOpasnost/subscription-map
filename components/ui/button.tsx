@@ -53,11 +53,19 @@ function Button({
     loading?: boolean
     loadingText?: string
   }) {
-  const Comp = asChild ? Slot : "button"
   const isLoading = !!loading
-  const isDisabled = !!disabled || (!asChild && isLoading)
+  const canSlot = asChild && React.Children.count(children) === 1
+  const Comp = canSlot ? Slot : "button"
+
+  if (asChild && !canSlot && process.env.NODE_ENV !== "production") {
+    console.warn(
+      "[ui/Button] `asChild` expects exactly one child element. Falling back to a native <button> to avoid a crash."
+    )
+  }
+
+  const isDisabled = !!disabled || (!canSlot && isLoading)
   const content =
-    !asChild && isLoading && typeof loadingText === "string" && loadingText.trim().length > 0 ? loadingText : children
+    !canSlot && isLoading && typeof loadingText === "string" && loadingText.trim().length > 0 ? loadingText : children
 
   return (
     <Comp
@@ -67,14 +75,14 @@ function Button({
       data-loading={isLoading ? "true" : "false"}
       aria-busy={isLoading || undefined}
       aria-disabled={isDisabled || undefined}
-      disabled={!asChild ? isDisabled : undefined}
+      disabled={!canSlot ? isDisabled : undefined}
       className={cn(
         buttonVariants({ variant, size, className }),
-        isDisabled && asChild ? "pointer-events-none opacity-50" : ""
+        isDisabled && canSlot ? "pointer-events-none opacity-50" : ""
       )}
       {...props}
     >
-      {!asChild && isLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+      {!canSlot && isLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
       {content}
     </Comp>
   )
