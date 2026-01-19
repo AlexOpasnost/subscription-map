@@ -55,19 +55,9 @@ function Button({
   }) {
   const Comp = asChild ? Slot : "button"
   const isLoading = !!loading
-  const isDisabled = !!disabled || isLoading
-  const content = isLoading && typeof loadingText === "string" && loadingText.trim().length > 0 ? loadingText : children
-
-  const slottableChild = React.useMemo(() => {
-    if (!asChild) return null
-    const arr = React.Children.toArray(children).filter((c) => {
-      if (c === null || c === undefined) return false
-      if (typeof c === "string") return c.trim().length > 0
-      return true
-    })
-    const firstElement = arr.find((c) => React.isValidElement(c))
-    return (firstElement as React.ReactElement) ?? null
-  }, [asChild, children])
+  const isDisabled = !!disabled || (!asChild && isLoading)
+  const content =
+    !asChild && isLoading && typeof loadingText === "string" && loadingText.trim().length > 0 ? loadingText : children
 
   return (
     <Comp
@@ -84,8 +74,8 @@ function Button({
       )}
       {...props}
     >
-      {isLoading && !asChild ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
-      {asChild ? slottableChild : content}
+      {!asChild && isLoading ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+      {content}
     </Comp>
   )
 }
