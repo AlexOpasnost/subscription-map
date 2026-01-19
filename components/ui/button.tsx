@@ -54,7 +54,11 @@ function Button({
     loadingText?: string
   }) {
   const isLoading = !!loading
-  const canSlot = asChild && React.Children.count(children) === 1
+  const normalizedChildren = React.Children.toArray(children)
+  const canSlot =
+    asChild &&
+    normalizedChildren.length === 1 &&
+    React.isValidElement(normalizedChildren[0])
   const Comp = canSlot ? Slot : "button"
 
   if (asChild && !canSlot && process.env.NODE_ENV !== "production") {

@@ -138,7 +138,7 @@ function CheckEmailInner() {
             <Button type="button" variant="outline" onClick={openGmail} disabled={checkingSession}>
               Open Gmail
             </Button>
-            <Button asChild type="button" variant="outline" disabled={checkingSession}>
+            <Button asChild variant="outline" disabled={checkingSession}>
               <Link href="mailto:">Open Mail</Link>
             </Button>
           </div>
