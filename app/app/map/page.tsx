@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
@@ -12,6 +11,8 @@ import EmptyState from "@/components/EmptyState"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
 import { Skeleton } from "@/components/ui/skeleton"
+import { GlassSurface } from "@/components/ui/GlassSurface"
+import { Info } from "lucide-react"
 
 type Period = "monthly" | "yearly"
 
@@ -180,11 +181,9 @@ export default function MapPage() {
       <PageShell>
         <AppHeader title="Subscription Map" onSignOut={signOut} currentPage="map" />
         <div className="space-y-6">
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardHeader>
-              <CardTitle>Subscription Map</CardTitle>
-            </CardHeader>
-            <CardContent className="p-6">
+          <GlassSurface className="p-0">
+            <div className="p-6 sm:p-8">
+              <div className="text-sm font-semibold tracking-tight text-foreground/90">Subscription Map</div>
               <div className="space-y-4">
                 <div className="text-center space-y-2">
                   <Skeleton className="h-10 w-40 mx-auto" />
@@ -195,16 +194,16 @@ export default function MapPage() {
                   <Skeleton className="h-4 w-20 mx-auto" />
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
 
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardContent className="p-6">
+          <GlassSurface variant="subtle" className="p-0">
+            <div className="p-6 sm:p-8">
               <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-56 w-full mt-4" />
+              <Skeleton className="h-[260px] sm:h-[360px] w-full mt-4 rounded-2xl" />
               <p className="text-xs text-muted-foreground text-center mt-3">Loading map…</p>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
         </div>
       </PageShell>
     )
@@ -228,28 +227,28 @@ export default function MapPage() {
     <PageShell>
       <AppHeader title="Subscription Map" onSignOut={signOut} currentPage="map" />
       
-      <div className="space-y-6">
-          {loadError && (
-            <Card className="rounded-2xl shadow-sm border bg-card">
-              <CardContent className="p-4 text-sm text-destructive">
-                {loadError}
-              </CardContent>
-            </Card>
-          )}
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardHeader>
-            <CardTitle>Your Subscription Map</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
+      <div className="mx-auto w-full max-w-[900px] space-y-6">
+        {loadError ? (
+          <GlassSurface variant="subtle" className="p-0">
+            <div className="p-5 sm:p-6">
+              <div className="text-sm font-semibold text-foreground/90">We couldn’t load the map</div>
+              <div className="mt-1 text-sm text-muted-foreground">{loadError}</div>
+            </div>
+          </GlassSurface>
+        ) : null}
+
+        <GlassSurface className="p-0">
+          <div className="p-6 sm:p-8">
+            <div className="text-sm font-semibold tracking-tight text-foreground/90">Your Subscription Map</div>
             <div className="space-y-4">
               <div className="text-center">
-                <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums mb-1">
+                <div className="text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums text-foreground/95 mb-1">
                   ${totalMonthly.toFixed(2)}
                 </div>
                 <div className="text-sm text-muted-foreground">per month</div>
               </div>
               <div className="text-center pt-2 border-t">
-                <div className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums mb-1">
+                <div className="text-2xl sm:text-3xl font-semibold tracking-tight tabular-nums text-foreground/95 mb-1">
                   ${totalYearly.toFixed(2)}
                 </div>
                 <div className="text-sm text-muted-foreground">per year</div>
@@ -260,41 +259,45 @@ export default function MapPage() {
                 </p>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </GlassSurface>
 
         {topSubscriptions.length > 0 && (
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardHeader>
-              <CardTitle>Top subscriptions</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <GlassSurface variant="subtle" className="p-0">
+            <div className="p-6 sm:p-8">
+              <div className="text-sm font-semibold tracking-tight text-foreground/90">Top subscriptions</div>
               <div className="space-y-3">
                 {topSubscriptions.map((sub) => {
                   const monthlyCost = getMonthlyCost(sub)
                   return (
-                    <div key={sub.id} className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{sub.service}</span>
-                      <span className="text-sm font-semibold tabular-nums">
+                    <div key={sub.id} className="flex items-center justify-between gap-4">
+                      <span className="text-sm font-medium text-foreground/90 truncate">{sub.service}</span>
+                      <span className="text-sm font-semibold tabular-nums text-foreground/95 shrink-0">
                         ${monthlyCost.toFixed(2)}/mo
                       </span>
                     </div>
                   )
                 })}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
         )}
 
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardContent className="p-3 sm:p-4">
-            <div className="flex items-center justify-between gap-3 px-1 py-1">
-              <div className="text-sm font-medium">Map</div>
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold tracking-tight text-foreground/90">Map</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  A quick view of your biggest recurring costs.
+                </div>
+              </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setShowMap((v) => !v)}
+                className="h-9 px-3 self-end sm:self-auto"
               >
                 {showMap ? "Hide map" : "Show map"}
               </Button>
@@ -302,17 +305,24 @@ export default function MapPage() {
 
             {showMap ? (
               <>
-                <div className="mt-3 rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">This view highlights your biggest recurring costs.</span>{" "}
-                  Tap a circle to open details. Circle size = monthly cost, color = category.
+                <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-xl border border-white/10 bg-white/5 shrink-0">
+                      <Info className="h-3.5 w-3.5 text-foreground/80" aria-hidden="true" />
+                    </div>
+                    <div className="text-xs text-muted-foreground leading-relaxed">
+                      <span className="font-medium text-foreground/90">Info:</span> Tap a circle to open details. Circle
+                      size reflects monthly cost.
+                    </div>
+                  </div>
                 </div>
 
-                <div className="w-full overflow-hidden mt-3">
-                  <div className="rounded-lg border bg-card p-3 sm:p-4">
+                <div className="mt-4 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] overflow-hidden">
+                  <div className="h-[260px] sm:h-[360px] w-full p-3 sm:p-4">
                     <svg
                       viewBox={`0 0 ${svgSize} ${svgSize}`}
                       preserveAspectRatio="xMidYMid meet"
-                      className="w-full h-auto"
+                      className="w-full h-full"
                       xmlns="http://www.w3.org/2000/svg"
                     >
                       {/* Center circle - "You" */}
@@ -320,13 +330,13 @@ export default function MapPage() {
                         cx={centerX}
                         cy={centerY}
                         r={30}
-                        className="fill-gray-900 dark:fill-gray-100"
+                        className="fill-[rgba(255,255,255,0.10)]"
                       />
                       <text
                         x={centerX}
                         y={centerY + 5}
                         textAnchor={"middle" as const}
-                        className="fill-white dark:fill-gray-900 font-semibold"
+                        className="fill-foreground font-semibold"
                         fontSize="14"
                       >
                         You
@@ -341,7 +351,7 @@ export default function MapPage() {
                           x2={pos.x}
                           y2={pos.y}
                           stroke="currentColor"
-                          className="stroke-gray-300 dark:stroke-gray-700"
+                          className="stroke-white/20"
                           strokeWidth="1"
                           opacity="0.3"
                         />
@@ -386,7 +396,7 @@ export default function MapPage() {
                                   x={pos.textX}
                                   y={pos.textY - 5}
                                   textAnchor={"middle" as const}
-                                  className="fill-foreground font-semibold"
+                                  className="fill-foreground/95 font-semibold"
                                   fontSize={isMobile ? "11" : "12"}
                                 >
                                   {serviceLabel}
@@ -414,8 +424,8 @@ export default function MapPage() {
                 The map is optional. Show it when you want a quick view of your biggest recurring costs.
               </p>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </GlassSurface>
       </div>
     </PageShell>
   )
