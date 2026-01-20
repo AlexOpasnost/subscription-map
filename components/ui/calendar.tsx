@@ -33,7 +33,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
         day: cn(
           buttonVariants({ variant: "ghost", size: "icon" }),
-          "h-9 w-9 p-0 font-normal text-foreground/90 hover:bg-accent hover:text-accent-foreground"
+          "h-9 w-9 p-0 font-normal text-foreground/90 hover:bg-muted/50 hover:text-foreground"
         ),
         day_selected:
           "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",

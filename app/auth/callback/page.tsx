@@ -49,7 +49,7 @@ function AuthCallbackInner() {
   }, [router, searchParams])
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-6 bg-muted/30">
+    <div className="min-h-dvh flex items-center justify-center p-6 bg-background">
       <div className="text-center space-y-2">
         <div className="text-lg font-semibold">{msg}</div>
         <div className="text-sm text-muted-foreground">Please wait.</div>
@@ -62,7 +62,7 @@ export default function AuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center p-6 bg-muted/30">
+        <div className="min-h-dvh flex items-center justify-center p-6 bg-background">
           <div className="text-center space-y-2">
             <div className="text-lg font-semibold">Signing you in…</div>
             <div className="text-sm text-muted-foreground">Please wait.</div>

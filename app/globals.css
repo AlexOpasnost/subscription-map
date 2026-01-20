@@ -28,8 +28,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
+  /* Neutral "accent" surfaces (NOT the orange brand accent) */
+  --color-accent-foreground: var(--foreground);
+  --color-accent: var(--surface-2);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -50,57 +51,66 @@
 }
 
 :root {
-  /* Fintech neutral-first (dark): grayscale surfaces + restrained accents */
-  --radius: 0.75rem;
+  /* Revolut-inspired dark-first system (neutral surfaces, restrained accents) */
+  --radius: 1rem;
+
+  /* Base palette (custom design tokens) */
+  --bg: #0b0c0e;
+  --surface: #131417;
+  --surface-2: #1a1b1f;
+  --border: rgba(255, 255, 255, 0.06);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted-text: rgba(255, 255, 255, 0.62);
+  --muted-2: rgba(255, 255, 255, 0.42);
+  --accent: #f2a640; /* orange: CTA/focus only */
+  --success: #2ecc71; /* green: success/status only */
+  --danger: #ff4d4f;
 
   /* Surface layers */
-  --surface-0: oklch(0.14 0 0); /* page */
-  --surface-1: oklch(0.17 0 0); /* cards */
-  --surface-2: oklch(0.20 0 0); /* panels inside cards */
+  --surface-0: var(--bg);
+  --surface-1: var(--surface);
+  --surface-2: var(--surface-2);
 
-  /* Core shadcn tokens */
-  --background: var(--surface-0);
-  --foreground: oklch(0.975 0 0);
-  --card: var(--surface-1);
-  --card-foreground: oklch(0.975 0 0);
-  --popover: var(--surface-1);
-  --popover-foreground: oklch(0.975 0 0);
+  /* shadcn tokens (mapped to neutral-first) */
+  --background: var(--bg);
+  --foreground: var(--text);
+  --card: var(--surface);
+  --card-foreground: var(--text);
+  --popover: var(--surface);
+  --popover-foreground: var(--text);
 
-  /* Brand accent (use sparingly) */
-  --primary: oklch(0.62 0.11 182); /* deep teal/green */
-  --primary-foreground: oklch(0.14 0 0);
+  /* Primary buttons + focus ring use orange */
+  --primary: var(--accent);
+  --primary-foreground: var(--bg);
+  --ring: var(--accent);
 
-  /* Neutral UI */
   --secondary: var(--surface-2);
-  --secondary-foreground: oklch(0.975 0 0);
+  --secondary-foreground: var(--text);
   --muted: var(--surface-2);
-  --muted-foreground: oklch(0.72 0 0);
+  --muted-foreground: var(--muted-text);
 
-  /* Warm highlight (rare) */
-  --accent: oklch(0.72 0.17 55);
-  --accent-foreground: oklch(0.14 0 0);
+  /* Keep "accent" surfaces neutral via @theme mapping above */
+  --accent-foreground: var(--text);
 
-  --destructive: oklch(0.62 0.22 25);
-  --border: oklch(0.28 0 0);
-  --input: oklch(0.28 0 0);
+  --destructive: var(--danger);
+  --border: var(--border);
+  --input: var(--border);
 
-  /* Focus rings should feel brand-consistent (not orange everywhere) */
-  --ring: oklch(0.62 0.11 182);
+  /* Charts (optional) */
+  --chart-1: var(--accent);
+  --chart-2: rgba(46, 204, 113, 1);
+  --chart-3: rgba(130, 130, 130, 1);
+  --chart-4: rgba(255, 255, 255, 0.18);
+  --chart-5: rgba(255, 255, 255, 0.12);
 
-  --chart-1: oklch(0.7 0.12 182);
-  --chart-2: oklch(0.68 0.1 160);
-  --chart-3: oklch(0.62 0.08 210);
-  --chart-4: oklch(0.78 0.12 55);
-  --chart-5: oklch(0.7 0.1 35);
-
-  --sidebar: var(--surface-1);
-  --sidebar-foreground: oklch(0.975 0 0);
-  --sidebar-primary: oklch(0.62 0.11 182);
-  --sidebar-primary-foreground: oklch(0.14 0 0);
+  --sidebar: var(--surface);
+  --sidebar-foreground: var(--text);
+  --sidebar-primary: var(--accent);
+  --sidebar-primary-foreground: var(--bg);
   --sidebar-accent: var(--surface-2);
-  --sidebar-accent-foreground: oklch(0.975 0 0);
-  --sidebar-border: oklch(0.28 0 0);
-  --sidebar-ring: oklch(0.62 0.11 182);
+  --sidebar-accent-foreground: var(--text);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--accent);
 }
 
 /* Optional light mode hook for future i18n/theming. */

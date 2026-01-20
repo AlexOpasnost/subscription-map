@@ -19,7 +19,7 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={cn(
-              "h-9 w-9 shrink-0 rounded-xl border bg-primary/15",
+              "h-9 w-9 shrink-0 rounded-xl border border-border/70 bg-muted/40",
               "flex items-center justify-center"
             )}
             aria-hidden="true"

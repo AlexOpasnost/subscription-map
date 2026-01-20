@@ -30,7 +30,7 @@ export default function EmptyState({
             <ul className="text-left space-y-2 text-sm text-muted-foreground">
               {bullets.map((bullet, idx) => (
                 <li key={idx} className="flex items-start gap-2">
-                  <span className="text-primary mt-0.5">•</span>
+                  <span className="text-muted-foreground/70 mt-0.5">•</span>
                   <span>{bullet}</span>
                 </li>
               ))}

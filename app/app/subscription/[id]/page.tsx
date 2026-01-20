@@ -376,7 +376,7 @@ export default function SubscriptionDetailsPage() {
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-sm font-medium text-muted-foreground">Status</span>
                 <Badge
-                  variant={subscription.cancelled ? "secondary" : "default"}
+                  variant={subscription.cancelled ? "secondary" : "success"}
                   className="text-xs"
                 >
                   {subscription.cancelled ? "Cancelled" : "Active"}
@@ -385,7 +385,7 @@ export default function SubscriptionDetailsPage() {
 
               <div className="pt-2 border-t">
                 <div className="text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Info only:</span> This service is often cheaper in{" "}
+                  <span className="font-medium text-[color:var(--accent)]">Info only:</span> This service is often cheaper in{" "}
                   <span className="text-foreground">{cheaperRegions.join(", ")}</span>. Pricing varies by region and can change.
                 </div>
               </div>
