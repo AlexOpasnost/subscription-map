@@ -10,36 +10,45 @@ import { buttonVariants } from "@/components/ui/button"
 export type CalendarProps = DayPickerProps
 
 function Calendar({ className, classNames, showOutsideDays = true, ...props }: CalendarProps) {
+  const weekdayFormatter =
+    props.formatters?.formatWeekdayName ??
+    ((date: Date) => date.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2))
+
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-2", className)}
+      formatters={{
+        ...props.formatters,
+        formatWeekdayName: weekdayFormatter,
+      }}
+      className={cn("w-full", className)}
       classNames={{
-        months: "flex flex-col gap-4",
-        month: "space-y-3",
+        months: "flex flex-col gap-3",
+        month: "w-full space-y-3",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium text-foreground/90",
+        caption_label: "text-sm font-medium text-foreground/90 tabular-nums",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "bg-transparent hover:bg-white/5 text-foreground/80"
+          "bg-transparent hover:bg-white/5 text-foreground/85 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
         ),
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
-        table: "w-full border-collapse space-y-1",
-        head_row: "flex",
-        head_cell: "text-muted-foreground rounded-md w-9 font-normal text-[0.75rem]",
-        row: "flex w-full mt-1",
+        table: "w-full table-fixed border-collapse",
+        head_row: "grid grid-cols-7 gap-1",
+        head_cell:
+          "h-8 w-full flex items-center justify-center text-muted-foreground/80 font-medium text-[0.72rem] tracking-wide",
+        row: "grid grid-cols-7 gap-1 mt-1",
         cell:
-          "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-white/5 first:[&:has([aria-selected])]:rounded-l-lg last:[&:has([aria-selected])]:rounded-r-lg",
+          "relative h-10 w-full p-0 text-center text-sm focus-within:relative focus-within:z-20",
         day: cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "h-9 w-9 p-0 font-normal aria-selected:opacity-100 hover:bg-white/5"
+          "h-10 w-full rounded-xl p-0 font-normal aria-selected:opacity-100 hover:bg-white/5 hover:ring-1 hover:ring-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
         ),
         day_selected:
-          "bg-[color:color-mix(in_srgb,var(--accent)_26%,transparent)] text-foreground/95 hover:bg-[color:color-mix(in_srgb,var(--accent)_32%,transparent)]",
+          "bg-[linear-gradient(180deg,rgba(59,130,246,0.98),rgba(37,99,235,0.98))] text-white shadow-[0_10px_30px_rgba(59,130,246,0.18)] hover:brightness-105",
         day_today:
-          "border border-[color:color-mix(in_srgb,var(--accent)_24%,transparent)]",
+          "ring-1 ring-[color:color-mix(in_srgb,var(--accent)_24%,transparent)]",
         day_outside: "text-muted-foreground/50 opacity-60",
         day_disabled: "text-muted-foreground/40 opacity-40",
         day_range_middle: "aria-selected:bg-white/5 aria-selected:text-foreground/90",

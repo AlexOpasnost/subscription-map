@@ -448,13 +448,22 @@ export default function SubscriptionDetailsPage() {
                         <CalendarDays className="size-4 opacity-70" aria-hidden="true" />
                       </button>
                     </PopoverTrigger>
-                    <PopoverContent side="bottom" align="start" collisionPadding={12} className="p-2">
-                      <Calendar
-                        mode="single"
-                        selected={selectedRenewalDate}
-                        onSelect={(date) => setRenewalDate(date ? format(date, "yyyy-MM-dd") : "")}
-                        initialFocus
-                      />
+                    <PopoverContent
+                      side="bottom"
+                      align="start"
+                      collisionPadding={12}
+                      className="w-[340px] sm:w-[360px] p-0 overflow-hidden"
+                    >
+                      <div className="p-3 min-h-[320px]">
+                        <Calendar
+                          className="w-full"
+                          fixedWeeks
+                          mode="single"
+                          selected={selectedRenewalDate}
+                          onSelect={(date) => setRenewalDate(date ? format(date, "yyyy-MM-dd") : "")}
+                          initialFocus
+                        />
+                      </div>
                     </PopoverContent>
                   </Popover>
 
