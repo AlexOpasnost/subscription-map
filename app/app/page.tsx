@@ -234,10 +234,10 @@ export default function AppPage() {
 
         {loadError && subscriptions.length === 0 ? null : (
           <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardContent className="p-6 sm:p-8 text-center">
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-muted-foreground">You spend</p>
-                <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums">
+            <CardContent className="p-8 sm:p-10 text-center">
+              <div className="space-y-4">
+                <p className="text-sm font-medium text-muted-foreground tracking-tight">You spend</p>
+                <div className="text-5xl sm:text-6xl font-bold tracking-tight tabular-nums">
                   ${totalMonthly.toFixed(2)}
                 </div>
                 <p className="text-base sm:text-lg text-muted-foreground">
