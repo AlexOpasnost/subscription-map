@@ -345,7 +345,7 @@ export default function SubscriptionDetailsPage() {
     <PageShell>
       <AppHeader title={subscription.service} onSignOut={signOut} currentPage="detail" />
       
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[720px] space-y-5">
         <Button
           variant="ghost"
           onClick={() => router.push("/app")}
@@ -355,72 +355,72 @@ export default function SubscriptionDetailsPage() {
           ← Back
         </Button>
 
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardHeader>
-            <CardTitle>Details</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-center py-2">
-              <div className="text-4xl sm:text-5xl font-bold tracking-tight tabular-nums mb-1">
+        <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+          <CardContent className="p-6 sm:p-8">
+            {/* Price block */}
+            <div className="text-center py-1">
+              <div className="text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums text-foreground/95">
                 ${monthlyPrice.toFixed(2)}
               </div>
-              <div className="text-sm text-muted-foreground">per month</div>
-              <div className="text-base text-muted-foreground mt-2">
+              <div className="mt-2 text-sm text-muted-foreground">per month</div>
+              <div className="mt-2 text-sm text-muted-foreground">
                 ${yearlyPrice.toFixed(2)} per year
               </div>
             </div>
 
-            <div className="space-y-3 pt-4 border-t">
+            {/* Meta */}
+            <div className="mt-8 space-y-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Billing Period</span>
-                <span className="text-sm font-medium capitalize">{subscription.period}</span>
-              </div>
-              {subscription.plan && (
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Plan</span>
-                  <span className="text-sm font-medium">{subscription.plan}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-muted-foreground">Category</span>
-                <span className="text-sm font-medium">{displayCategory}</span>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t">
-                <span className="text-sm font-medium text-muted-foreground">Status</span>
-                <Badge
-                  variant="secondary"
-                  className="text-xs"
-                >
+                <span className="text-sm text-muted-foreground">Status</span>
+                <Badge variant="secondary" className="text-xs">
                   {subscription.cancelled ? "Cancelled" : "Active"}
                 </Badge>
               </div>
 
-              <div className="pt-2 border-t">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-white/8">
+                <div className="flex items-center justify-between sm:block">
+                  <div className="text-xs text-muted-foreground">Billing period</div>
+                  <div className="mt-1 text-sm font-medium capitalize text-foreground/90">{subscription.period}</div>
+                </div>
+                <div className="flex items-center justify-between sm:block">
+                  <div className="text-xs text-muted-foreground">Category</div>
+                  <div className="mt-1 text-sm font-medium text-foreground/90">{displayCategory}</div>
+                </div>
+                {subscription.plan ? (
+                  <div className="flex items-center justify-between sm:block">
+                    <div className="text-xs text-muted-foreground">Plan</div>
+                    <div className="mt-1 text-sm font-medium text-foreground/90">{subscription.plan}</div>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="pt-4 border-t border-white/8">
                 <div className="text-xs text-muted-foreground">
                   <span className="font-medium text-[color:var(--accent)]">Info only:</span> This service is often cheaper in{" "}
-                  <span className="text-foreground">{cheaperRegions.join(", ")}</span>. Pricing varies by region and can change.
+                  <span className="text-foreground/90">{cheaperRegions.join(", ")}</span>. Pricing varies by region and can change.
                 </div>
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardHeader>
-            <CardTitle>Renewal & reminders</CardTitle>
-            <CardDescription>Stay ahead of renewals. No automation—just helpful reminders.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="renewal-date">Next renewal</Label>
+            {/* Renewal & reminders */}
+            <div className="mt-8 pt-6 border-t border-white/8">
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="text-sm font-medium text-foreground/90">Renewal & reminders</div>
+                <div className="text-xs text-muted-foreground">Utility settings</div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
+                  <Label htmlFor="renewal-date" className="text-foreground/80">
+                    Next renewal
+                  </Label>
                   <Input
                     id="renewal-date"
                     type="date"
                     value={renewalDate}
                     onChange={(e) => setRenewalDate(e.target.value)}
                     disabled={savingHelper}
+                    className="bg-white/5 border-white/10 focus-visible:border-[color:var(--accent)] focus-visible:ring-[color:var(--accent)]/25"
                   />
                   {renewalDate ? (
                     <div className="text-xs text-muted-foreground">
@@ -428,94 +428,100 @@ export default function SubscriptionDetailsPage() {
                     </div>
                   ) : null}
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reminder-days" className="text-foreground/80">
+                    Reminder
+                  </Label>
+                  <Select value={reminderDays} onValueChange={setReminderDays}>
+                    <SelectTrigger id="reminder-days" disabled={savingHelper} className="bg-white/5 border-white/10">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">1 day before</SelectItem>
+                      <SelectItem value="3">3 days before</SelectItem>
+                      <SelectItem value="7">7 days before</SelectItem>
+                      <SelectItem value="14">14 days before</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="notes" className="text-foreground/80">
+                    Notes
+                  </Label>
+                  <Textarea
+                    id="notes"
+                    placeholder="Anything you want to remember…"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    disabled={savingHelper}
+                    className="bg-white/5 border-white/10 focus-visible:ring-[color:var(--accent)]/25"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="reminder-days">Reminder</Label>
-                <Select value={reminderDays} onValueChange={setReminderDays}>
-                  <SelectTrigger id="reminder-days" disabled={savingHelper}>
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">1 day before</SelectItem>
-                    <SelectItem value="3">3 days before</SelectItem>
-                    <SelectItem value="7">7 days before</SelectItem>
-                    <SelectItem value="14">14 days before</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea
-                  id="notes"
-                  placeholder="Anything you want to remember…"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  disabled={savingHelper}
-                />
+
+              <div className="mt-5">
+                <Button
+                  onClick={handleSaveHelper}
+                  loading={savingHelper}
+                  loadingText="Saving…"
+                  className="w-full h-11 text-[15px] font-semibold tracking-tight text-white border-0 bg-[linear-gradient(180deg,rgba(59,130,246,0.98),rgba(37,99,235,0.98))] shadow-[0_10px_30px_rgba(59,130,246,0.16)] hover:shadow-[0_14px_40px_rgba(59,130,246,0.22)] hover:brightness-105"
+                >
+                  Save
+                </Button>
               </div>
             </div>
 
-            <Button onClick={handleSaveHelper} loading={savingHelper} loadingText="Saving…" className="w-full">
-              Save
-            </Button>
-          </CardContent>
-        </Card>
+            {/* Actions */}
+            <div className="mt-8 pt-6 border-t border-white/8">
+              <div className="text-sm font-medium text-foreground/90">Actions</div>
+              <div className="mt-4 space-y-4">
+                <div className="space-y-2">
+                  <Button
+                    variant="outline"
+                    onClick={handleOpenCancelPage}
+                    disabled={!hasCancelUrl || openingCancel}
+                    className="w-full"
+                    loading={openingCancel}
+                    loadingText="Opening…"
+                  >
+                    Open official cancel page
+                  </Button>
+                  <p className="text-xs text-muted-foreground">You can cancel anytime on the official page.</p>
+                  {!hasCancelUrl ? <p className="text-xs text-muted-foreground">No cancel link available</p> : null}
+                </div>
 
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardHeader>
-            <CardTitle>Actions</CardTitle>
-            <CardDescription>Manage your subscription</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Button
-                variant="outline"
-                onClick={handleOpenCancelPage}
-                disabled={!hasCancelUrl || openingCancel}
-                className="w-full"
-                loading={openingCancel}
-                loadingText="Opening…"
-              >
-                Open official cancel page
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                You can cancel anytime on the official page.
-              </p>
-              {!hasCancelUrl && (
-                <p className="text-xs text-muted-foreground">
-                  No cancel link available
-                </p>
-              )}
-            </div>
+                <div className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-white/8 bg-white/3">
+                  <div className="space-y-0.5 flex-1">
+                    <label className="text-sm font-medium cursor-pointer text-foreground/90" htmlFor="pause-toggle">
+                      Mark as cancelled
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      This is for your tracking only. It doesn’t cancel anything automatically.
+                    </p>
+                  </div>
+                  <Checkbox
+                    id="pause-toggle"
+                    checked={subscription.cancelled || false}
+                    onChange={handleTogglePaused}
+                    label=""
+                    disabled={togglingPaused}
+                  />
+                </div>
 
-            <div className="flex items-center justify-between p-4 border rounded-lg">
-              <div className="space-y-0.5 flex-1">
-                <label className="text-sm font-medium cursor-pointer" htmlFor="pause-toggle">
-                  Mark as cancelled
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  This is for your tracking only. It doesn’t cancel anything automatically.
-                </p>
+                <Button
+                  variant="destructive"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="w-full"
+                  loading={deleting}
+                  loadingText="Deleting…"
+                >
+                  Delete subscription
+                </Button>
               </div>
-              <Checkbox
-                id="pause-toggle"
-                checked={subscription.cancelled || false}
-                onChange={handleTogglePaused}
-                label=""
-                disabled={togglingPaused}
-              />
             </div>
-
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deleting}
-              className="w-full"
-              loading={deleting}
-              loadingText="Deleting…"
-            >
-              Delete subscription
-            </Button>
           </CardContent>
         </Card>
       </div>
