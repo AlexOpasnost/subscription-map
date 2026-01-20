@@ -28,9 +28,9 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
-  /* Neutral "accent" surfaces (NOT the orange brand accent) */
+  /* Accent surface (subtle blue wash for hover/focus only) */
   --color-accent-foreground: var(--foreground);
-  --color-accent: var(--surface-2);
+  --color-accent: var(--accent-surface);
   --color-muted-foreground: var(--muted-foreground);
   --color-muted: var(--muted);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -51,7 +51,7 @@
 }
 
 :root {
-  /* Revolut-inspired dark-first system (neutral surfaces, restrained accents) */
+  /* Revolut-style dark-first (neutral surfaces + single blue accent) */
   --radius: 1.25rem;
 
   /* Base palette (custom design tokens) */
@@ -62,8 +62,9 @@
   --text: rgba(255, 255, 255, 0.92);
   --muted-text: rgba(255, 255, 255, 0.62);
   --muted-2: rgba(255, 255, 255, 0.42);
-  --accent: #f2a33a; /* orange: CTA/focus only */
-  --success: #0e3b2e; /* deep green: subtle status only */
+  --accent: #3b82f6; /* blue: hover/focus only */
+  --accent-surface: rgba(59, 130, 246, 0.12);
+  --success: #0e3b2e; /* deep green: secondary only */
   --danger: #ff4d4f;
 
   /* Surface layers */
@@ -79,9 +80,9 @@
   --popover: var(--surface);
   --popover-foreground: var(--text);
 
-  /* Primary buttons + focus ring use orange */
-  --primary: var(--accent);
-  --primary-foreground: var(--bg);
+  /* Keep shadcn "primary" neutral; use accent only for hover/focus */
+  --primary: var(--surface-2);
+  --primary-foreground: var(--text);
   --ring: var(--accent);
 
   --secondary: var(--surface-2);
@@ -105,8 +106,8 @@
 
   --sidebar: var(--surface);
   --sidebar-foreground: var(--text);
-  --sidebar-primary: var(--accent);
-  --sidebar-primary-foreground: var(--bg);
+  --sidebar-primary: var(--surface-2);
+  --sidebar-primary-foreground: var(--text);
   --sidebar-accent: var(--surface-2);
   --sidebar-accent-foreground: var(--text);
   --sidebar-border: var(--border);
@@ -143,8 +144,7 @@
   body {
     @apply bg-background text-foreground;
     background-image:
-      radial-gradient(900px 500px at 20% -10%, rgba(242, 163, 58, 0.06), transparent 55%),
-      radial-gradient(900px 500px at 80% 0%, rgba(14, 59, 46, 0.08), transparent 60%),
+      radial-gradient(900px 500px at 18% -10%, rgba(59, 130, 246, 0.08), transparent 55%),
       radial-gradient(900px 600px at 50% 110%, rgba(255, 255, 255, 0.04), transparent 60%);
     background-attachment: fixed;
   }

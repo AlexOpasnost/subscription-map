@@ -75,13 +75,13 @@ export default function SubscriptionCard({
                   </Badge>
                 )}
                 <Badge
-                  variant={cancelled ? "secondary" : "success"}
+                  variant="secondary"
                   className="text-xs shrink-0"
                 >
                   {cancelled ? "Cancelled" : "Active"}
                 </Badge>
                 {showRenewalBadge && (
-                  <Badge variant="warning" className="text-xs shrink-0">
+                  <Badge variant="secondary" className="text-xs shrink-0">
                     {formatRenewalCountdown(daysUntilRenewal)}
                   </Badge>
                 )}

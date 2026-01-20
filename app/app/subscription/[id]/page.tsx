@@ -388,7 +388,7 @@ export default function SubscriptionDetailsPage() {
               <div className="flex items-center justify-between pt-2 border-t">
                 <span className="text-sm font-medium text-muted-foreground">Status</span>
                 <Badge
-                  variant={subscription.cancelled ? "secondary" : "success"}
+                  variant="secondary"
                   className="text-xs"
                 >
                   {subscription.cancelled ? "Cancelled" : "Active"}

@@ -269,7 +269,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       >
         <AccordionItem value="add-subscription" className="border-none">
           <AccordionTrigger
-            className="px-4 py-3 hover:no-underline rounded-2xl bg-primary text-primary-foreground shadow-sm border border-border/50 transition-colors hover:bg-primary/90"
+            className="px-4 py-3 hover:no-underline rounded-2xl bg-muted/20 text-foreground/90 shadow-sm border border-border/70 transition-colors hover:bg-accent"
             disabled={loading}
           >
             <span className="text-base font-medium">+ Add subscription</span>
