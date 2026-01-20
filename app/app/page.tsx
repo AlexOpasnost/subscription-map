@@ -17,6 +17,7 @@ import { formatDisplayDate } from "@/lib/formatDisplayDate"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Sparkles } from "lucide-react"
 
 interface Subscription {
   id: string
@@ -158,7 +159,17 @@ export default function AppPage() {
     <PageShell>
       <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
       
-      <div className="mx-auto w-full max-w-[720px] space-y-5">
+      <div className="relative mx-auto w-full max-w-[720px] space-y-5">
+        <div
+          className="pointer-events-none absolute -inset-x-6 -top-10 -bottom-10"
+          aria-hidden="true"
+          style={{
+            background:
+              "radial-gradient(900px 520px at 50% 0%, rgba(59,130,246,0.10), transparent 62%)," +
+              "radial-gradient(900px 600px at 50% 110%, rgba(255,255,255,0.04), transparent 60%)",
+          }}
+        />
+
         {loadError && subscriptions.length > 0 ? (
           <Card className="border border-white/8 bg-white/[0.04] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
             <CardContent className="p-5 sm:p-6">
@@ -212,17 +223,40 @@ export default function AppPage() {
 
         {subscriptions.length === 0 && !loadError ? (
           <>
-            <EmptyState
-              title="Get started with Subscription Map"
-              description="Track and manage all your recurring subscriptions in one place."
-              bullets={[
-                "Track recurring spending",
-                "See total monthly and yearly costs",
-                "Open cancel links directly"
-              ]}
-              ctaLabel="Add your first subscription"
-              onCtaClick={() => setFormOpen(true)}
-            />
+            <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+              <CardContent className="p-6 sm:p-8 text-center">
+                <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+                  <Sparkles className="h-5 w-5 text-foreground/80" aria-hidden="true" />
+                </div>
+                <h2 className="mt-4 text-lg sm:text-xl font-semibold tracking-tight text-foreground/95">
+                  Get started with Subscription Map
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Track and manage all your recurring subscriptions in one place.
+                </p>
+
+                <div className="mt-5">
+                  <Button type="button" variant="primary" className="w-full h-11" onClick={() => setFormOpen(true)}>
+                    Add your first subscription
+                  </Button>
+                </div>
+
+                <div className="mt-5 grid gap-2 text-left text-sm text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 text-white/20">•</span>
+                    <span>Track recurring spending</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 text-white/20">•</span>
+                    <span>See total monthly and yearly costs</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="mt-0.5 text-white/20">•</span>
+                    <span>Open cancel links directly</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
             <AddSubscriptionForm
               onSuccess={(created) => {
                 if (created) {
@@ -237,6 +271,15 @@ export default function AppPage() {
           </>
         ) : loadError && subscriptions.length === 0 ? null : (
           <>
+            <AddSubscriptionForm
+              onSuccess={(created) => {
+                if (created) {
+                  setSubscriptions((prev) => [created, ...prev])
+                }
+                loadSubscriptions({ silent: true })
+              }}
+            />
+
             {(() => {
               // Subtle, optional utility panel (kept low-noise, no extra colors).
               if (loadError) return null
@@ -281,15 +324,6 @@ export default function AppPage() {
                 </Card>
               )
             })()}
-
-            <AddSubscriptionForm
-              onSuccess={(created) => {
-                if (created) {
-                  setSubscriptions((prev) => [created, ...prev])
-                }
-                loadSubscriptions({ silent: true })
-              }}
-            />
             
             <div className="space-y-3">
               {subscriptions.map((sub) => (

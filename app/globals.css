@@ -62,8 +62,10 @@
   --text: rgba(255, 255, 255, 0.92);
   --muted-text: rgba(255, 255, 255, 0.62);
   --muted-2: rgba(255, 255, 255, 0.42);
-  --accent: #3b82f6; /* blue: hover/focus only */
+  --accent: #3b82f6; /* primary accent (Revolut-like blue) */
   --accent-surface: rgba(59, 130, 246, 0.12);
+  --accent-2: #f2a33a; /* optional warm amber (highlights only) */
+  --accent-2-surface: rgba(242, 163, 58, 0.12);
   --success: #0e3b2e; /* deep green: secondary only */
   --danger: #ff4d4f;
 

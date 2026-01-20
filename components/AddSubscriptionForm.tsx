@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
+import { Plus } from "lucide-react"
 
 interface AddSubscriptionFormProps {
   onSuccess: (created?: {
@@ -272,7 +273,10 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
             className="px-5 py-4 hover:no-underline rounded-2xl bg-white/[0.02] text-foreground/90 border border-white/8 transition-colors hover:bg-accent"
             disabled={loading}
           >
-            <span className="text-base font-semibold tracking-tight">+ Add subscription</span>
+            <span className="flex items-center gap-2 text-base font-semibold tracking-tight">
+              <Plus className="h-4 w-4 text-foreground/70" aria-hidden="true" />
+              Add subscription
+            </span>
           </AccordionTrigger>
           <AccordionContent>
             <CardContent className="pt-0 pb-5 px-5 sm:px-6">
@@ -419,6 +423,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   </div>
                   <Button
                     type="submit"
+                    variant="primary"
                     disabled={!canSubmit}
                     className="w-full sm:w-auto"
                     loading={loading}

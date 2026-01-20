@@ -10,6 +10,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        primary:
+          "border-0 text-white bg-[linear-gradient(180deg,rgba(59,130,246,0.98),rgba(37,99,235,0.98))] shadow-[0_10px_30px_rgba(59,130,246,0.16)] hover:shadow-[0_14px_40px_rgba(59,130,246,0.22)] hover:brightness-105 active:brightness-95",
         default:
           "border border-border/70 bg-muted/20 text-foreground/90 shadow-xs hover:bg-accent hover:border-[color:color-mix(in_srgb,var(--accent)_28%,transparent)]",
         destructive:

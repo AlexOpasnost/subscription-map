@@ -51,7 +51,7 @@ export default function SubscriptionCard({
   return (
     <Card
       className={cn(
-        "border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl",
+        "border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl",
         "transition-[transform,box-shadow] duration-200",
         cancelled ? "opacity-70" : "hover:-translate-y-px hover:shadow-[0_26px_90px_rgba(0,0,0,0.55)]"
       )}
@@ -74,12 +74,18 @@ export default function SubscriptionCard({
                 )}
                 <Badge
                   variant="secondary"
-                  className="text-xs shrink-0"
+                  className={cn(
+                    "text-xs shrink-0",
+                    cancelled ? "bg-white/3 border-white/8 text-muted-foreground" : "bg-white/5 border-white/10 text-foreground/80"
+                  )}
                 >
                   {cancelled ? "Cancelled" : "Active"}
                 </Badge>
                 {showRenewalBadge && (
-                  <Badge variant="secondary" className="text-xs shrink-0">
+                  <Badge
+                    variant="secondary"
+                    className="text-xs shrink-0 border-[color:color-mix(in_srgb,var(--accent-2)_22%,transparent)] bg-[color:color-mix(in_srgb,var(--accent-2)_10%,transparent)] text-foreground/80"
+                  >
                     {formatRenewalCountdown(daysUntilRenewal)}
                   </Badge>
                 )}
