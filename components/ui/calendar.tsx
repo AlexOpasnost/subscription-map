@@ -26,19 +26,35 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         ),
         nav_button_previous: "absolute left-1",
         nav_button_next: "absolute right-1",
+        // react-day-picker v9 key names (v8 aliases left below for safety).
+        month_grid: "w-full border-collapse space-y-1",
+        weekdays: "flex w-full justify-between",
+        weekday: "w-9 shrink-0 text-center text-[0.8rem] font-normal text-muted-foreground",
+        week: "flex w-full justify-between mt-2",
+        day: "h-9 w-9 shrink-0 text-center p-0 relative",
+        day_button: cn(
+          buttonVariants({ variant: "ghost", size: "icon-sm" }),
+          "h-9 w-9 p-0 font-normal aria-selected:opacity-100"
+        ),
+        selected:
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+        today: "bg-accent text-accent-foreground",
+        outside:
+          "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+        disabled: "text-muted-foreground opacity-50",
+        hidden: "invisible",
+
+        // react-day-picker v8 aliases (some projects still rely on these keys).
         table: "w-full border-collapse space-y-1",
-        // Keep shadcn’s flex-based head/rows.
         head_row: "flex w-full justify-between",
-        head_cell:
-          // Fixed widths + no overlap for weekday labels.
-          "w-9 shrink-0 text-[0.8rem] font-normal text-muted-foreground text-center leading-none",
+        head_cell: "w-9 shrink-0 text-center text-[0.8rem] font-normal text-muted-foreground",
         row: "flex w-full justify-between mt-2",
-        // Fixed 7-column grid sizing.
         cell: "h-9 w-9 shrink-0 text-center p-0 relative",
-        day: cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "h-9 w-9 p-0 font-normal aria-selected:opacity-100"),
-        day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+        day_selected:
+          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
         day_today: "bg-accent text-accent-foreground",
-        day_outside: "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+        day_outside:
+          "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
         day_disabled: "text-muted-foreground opacity-50",
         day_hidden: "invisible",
         ...classNames,
