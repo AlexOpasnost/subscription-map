@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { GlassSurface } from "@/components/ui/GlassSurface"
 
 interface EmptyStateProps {
   title: string
@@ -19,8 +19,8 @@ export default function EmptyState({
   onCtaClick,
 }: EmptyStateProps) {
   return (
-    <Card className="rounded-2xl shadow-sm border bg-card">
-      <CardContent className="py-12 px-6 text-center">
+    <GlassSurface variant="subtle" className="p-0">
+      <div className="py-12 px-6 text-center">
         <div className="space-y-4 max-w-md mx-auto">
           <h3 className="text-lg font-semibold">{title}</h3>
           {description && (
@@ -40,7 +40,7 @@ export default function EmptyState({
             {ctaLabel}
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </GlassSurface>
   )
 }

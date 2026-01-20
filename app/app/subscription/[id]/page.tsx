@@ -2,10 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -25,6 +23,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
 import { getCheaperRegions } from "@/lib/priceComparison"
+import { GlassSurface } from "@/components/ui/GlassSurface"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { CalendarDays, X } from "lucide-react"
 
 interface Subscription {
   id: string
@@ -60,6 +63,17 @@ function formatDisplayDateEnUs(isoYyyyMmDd: string): string | null {
   const dt = new Date(Date.UTC(y, mo, d))
   if (Number.isNaN(dt.getTime())) return null
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dt)
+}
+
+function yyyyMmDdToLocalDate(isoYyyyMmDd: string): Date | undefined {
+  const s = isoYyyyMmDd.trim()
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return undefined
+  const y = Number(m[1])
+  const mo = Number(m[2]) - 1
+  const d = Number(m[3])
+  const dt = new Date(y, mo, d)
+  return Number.isNaN(dt.getTime()) ? undefined : dt
 }
 
 export default function SubscriptionDetailsPage() {
@@ -283,11 +297,10 @@ export default function SubscriptionDetailsPage() {
       <PageShell>
         <AppHeader title="Subscription" onSignOut={signOut} currentPage="detail" />
         <div className="space-y-6">
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardHeader>
-              <CardTitle>Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <GlassSurface variant="subtle" className="p-0">
+            <div className="px-6 py-6">
+              <div className="text-sm font-semibold text-foreground/90">Details</div>
+              <div className="mt-4 space-y-3">
               <Skeleton className="h-12 w-40 mx-auto" />
               <Skeleton className="h-4 w-28 mx-auto" />
               <Skeleton className="h-4 w-32 mx-auto" />
@@ -295,18 +308,19 @@ export default function SubscriptionDetailsPage() {
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-3/4" />
               </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardHeader>
-              <CardTitle>Actions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+              </div>
+            </div>
+          </GlassSurface>
+          <GlassSurface variant="subtle" className="p-0">
+            <div className="px-6 py-6">
+              <div className="text-sm font-semibold text-foreground/90">Actions</div>
+              <div className="mt-4 space-y-3">
               <Skeleton className="h-9 w-full" />
               <Skeleton className="h-14 w-full" />
               <Skeleton className="h-9 w-full" />
-            </CardContent>
-          </Card>
+              </div>
+            </div>
+          </GlassSurface>
         </div>
       </PageShell>
     )
@@ -316,14 +330,14 @@ export default function SubscriptionDetailsPage() {
     return (
       <PageShell>
         <AppHeader title="Subscription" onSignOut={signOut} currentPage="detail" />
-        <Card className="rounded-2xl shadow-sm border bg-card">
-          <CardContent className="py-12 text-center">
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="py-12 text-center px-6">
             <p className="text-muted-foreground mb-4">Subscription not found.</p>
-            <Button onClick={() => router.push("/app")} className="w-full sm:w-auto">
+            <Button onClick={() => router.push("/app")} variant="outline" className="w-full sm:w-auto">
               Back to Subscriptions
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </GlassSurface>
       </PageShell>
     )
   }
@@ -340,6 +354,7 @@ export default function SubscriptionDetailsPage() {
   // Sanitize category for display
   const displayCategory = subscription.category?.trim() || "—"
   const cheaperRegions = getCheaperRegions(subscription.service)
+  const selectedRenewalDate = renewalDate ? yyyyMmDdToLocalDate(renewalDate) : undefined
 
   return (
     <PageShell>
@@ -355,24 +370,23 @@ export default function SubscriptionDetailsPage() {
           ← Back
         </Button>
 
-        <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-          <CardContent className="p-6 sm:p-8">
-            {/* Price block */}
+        <GlassSurface className="p-0">
+          <div className="p-6 sm:p-8">
             <div className="text-center py-1">
               <div className="text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums text-foreground/95">
                 ${monthlyPrice.toFixed(2)}
               </div>
               <div className="mt-2 text-sm text-muted-foreground">per month</div>
-              <div className="mt-2 text-sm text-muted-foreground">
-                ${yearlyPrice.toFixed(2)} per year
-              </div>
+              <div className="mt-2 text-sm text-muted-foreground">${yearlyPrice.toFixed(2)} per year</div>
             </div>
 
-            {/* Meta */}
             <div className="mt-8 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Status</span>
-                <Badge variant="secondary" className="text-xs">
+                <Badge
+                  variant="secondary"
+                  className={subscription.cancelled ? "text-xs bg-white/3 border-white/8 text-muted-foreground" : "text-xs bg-white/5 border-white/10 text-foreground/80"}
+                >
                   {subscription.cancelled ? "Cancelled" : "Active"}
                 </Badge>
               </div>
@@ -394,136 +408,169 @@ export default function SubscriptionDetailsPage() {
                 ) : null}
               </div>
 
-              <div className="pt-4 border-t border-white/8">
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-medium text-[color:var(--accent)]">Info only:</span> This service is often cheaper in{" "}
-                  <span className="text-foreground/90">{cheaperRegions.join(", ")}</span>. Pricing varies by region and can change.
-                </div>
-              </div>
-            </div>
-
-            {/* Renewal & reminders */}
-            <div className="mt-8 pt-6 border-t border-white/8">
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="text-sm font-medium text-foreground/90">Renewal & reminders</div>
-                <div className="text-xs text-muted-foreground">Utility settings</div>
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="renewal-date" className="text-foreground/80">
-                    Next renewal
-                  </Label>
-                  <Input
-                    id="renewal-date"
-                    type="date"
-                    value={renewalDate}
-                    onChange={(e) => setRenewalDate(e.target.value)}
-                    disabled={savingHelper}
-                    className="bg-white/5 border-white/10 focus-visible:border-[color:var(--accent)] focus-visible:ring-[color:var(--accent)]/25"
-                  />
-                  {renewalDate ? (
-                    <div className="text-xs text-muted-foreground">
-                      {formatDisplayDateEnUs(renewalDate) ?? renewalDate}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="reminder-days" className="text-foreground/80">
-                    Reminder
-                  </Label>
-                  <Select value={reminderDays} onValueChange={setReminderDays}>
-                    <SelectTrigger id="reminder-days" disabled={savingHelper} className="bg-white/5 border-white/10">
-                      <SelectValue placeholder="Select" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">1 day before</SelectItem>
-                      <SelectItem value="3">3 days before</SelectItem>
-                      <SelectItem value="7">7 days before</SelectItem>
-                      <SelectItem value="14">14 days before</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="notes" className="text-foreground/80">
-                    Notes
-                  </Label>
-                  <Textarea
-                    id="notes"
-                    placeholder="Anything you want to remember…"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    disabled={savingHelper}
-                    className="bg-white/5 border-white/10 focus-visible:ring-[color:var(--accent)]/25"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-5">
-                <Button
-                  onClick={handleSaveHelper}
-                  loading={savingHelper}
-                  loadingText="Saving…"
-                  className="w-full h-11 text-[15px] font-semibold tracking-tight text-white border-0 bg-[linear-gradient(180deg,rgba(59,130,246,0.98),rgba(37,99,235,0.98))] shadow-[0_10px_30px_rgba(59,130,246,0.16)] hover:shadow-[0_14px_40px_rgba(59,130,246,0.22)] hover:brightness-105"
-                >
-                  Save
-                </Button>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="mt-8 pt-6 border-t border-white/8">
-              <div className="text-sm font-medium text-foreground/90">Actions</div>
-              <div className="mt-4 space-y-4">
-                <div className="space-y-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleOpenCancelPage}
-                    disabled={!hasCancelUrl || openingCancel}
-                    className="w-full"
-                    loading={openingCancel}
-                    loadingText="Opening…"
-                  >
-                    Open official cancel page
-                  </Button>
-                  <p className="text-xs text-muted-foreground">You can cancel anytime on the official page.</p>
-                  {!hasCancelUrl ? <p className="text-xs text-muted-foreground">No cancel link available</p> : null}
-                </div>
-
-                <div className="flex items-center justify-between gap-3 p-4 rounded-2xl border border-white/8 bg-white/3">
-                  <div className="space-y-0.5 flex-1">
-                    <label className="text-sm font-medium cursor-pointer text-foreground/90" htmlFor="pause-toggle">
-                      Mark as cancelled
-                    </label>
-                    <p className="text-xs text-muted-foreground">
-                      This is for your tracking only. It doesn’t cancel anything automatically.
-                    </p>
+              {cheaperRegions.length > 0 ? (
+                <div className="pt-4 border-t border-white/8">
+                  <div className="text-xs text-muted-foreground">
+                    Pricing can vary by region; this service is often cheaper in{" "}
+                    <span className="text-foreground/90">{cheaperRegions.join(", ")}</span>.
                   </div>
-                  <Checkbox
-                    id="pause-toggle"
-                    checked={subscription.cancelled || false}
-                    onChange={handleTogglePaused}
-                    label=""
-                    disabled={togglingPaused}
-                  />
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </GlassSurface>
+
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="p-6 sm:p-8">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="text-sm font-semibold text-foreground/90">Renewal & reminders</div>
+              <div className="text-xs text-muted-foreground">Utility settings</div>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="renewal-date" className="text-foreground/80">
+                  Next renewal
+                </Label>
+
+                <div className="flex gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        id="renewal-date"
+                        type="button"
+                        disabled={savingHelper}
+                        className="h-10 w-full flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-3 text-left text-sm text-foreground/90 shadow-xs transition-[color,box-shadow,background-color,border-color] outline-none hover:bg-white/6 focus-visible:border-[color:var(--accent)] focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px] disabled:pointer-events-none disabled:opacity-50"
+                      >
+                        <span className={renewalDate ? "text-foreground/90" : "text-muted-foreground"}>
+                          {renewalDate ? (formatDisplayDateEnUs(renewalDate) ?? renewalDate) : "Pick a date"}
+                        </span>
+                        <CalendarDays className="size-4 opacity-70" aria-hidden="true" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="bottom" align="start" collisionPadding={12} className="p-2">
+                      <Calendar
+                        mode="single"
+                        selected={selectedRenewalDate}
+                        onSelect={(date) => setRenewalDate(date ? format(date, "yyyy-MM-dd") : "")}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setRenewalDate("")}
+                    disabled={!renewalDate || savingHelper}
+                    className="shrink-0"
+                    aria-label="Clear renewal date"
+                  >
+                    <X className="size-4" aria-hidden="true" />
+                  </Button>
                 </div>
 
-                <Button
-                  variant="destructive"
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="w-full"
-                  loading={deleting}
-                  loadingText="Deleting…"
-                >
-                  Delete subscription
-                </Button>
+                {renewalDate ? (
+                  <div className="text-xs text-muted-foreground">{formatDisplayDateEnUs(renewalDate) ?? renewalDate}</div>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="reminder-days" className="text-foreground/80">
+                  Reminder
+                </Label>
+                <Select value={reminderDays} onValueChange={setReminderDays}>
+                  <SelectTrigger id="reminder-days" disabled={savingHelper}>
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1 day before</SelectItem>
+                    <SelectItem value="3">3 days before</SelectItem>
+                    <SelectItem value="7">7 days before</SelectItem>
+                    <SelectItem value="14">14 days before</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="notes" className="text-foreground/80">
+                  Notes
+                </Label>
+                <Textarea
+                  id="notes"
+                  placeholder="Anything you want to remember…"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  disabled={savingHelper}
+                />
               </div>
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="mt-5">
+              <Button
+                onClick={handleSaveHelper}
+                loading={savingHelper}
+                loadingText="Saving…"
+                variant="primary"
+                className="w-full h-11 text-[15px] font-semibold tracking-tight"
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </GlassSurface>
+
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="p-6 sm:p-8">
+            <div className="text-sm font-semibold text-foreground/90">Actions</div>
+            <div className="mt-4 space-y-4">
+              <div className="space-y-2">
+                <Button
+                  variant="outline"
+                  onClick={handleOpenCancelPage}
+                  disabled={!hasCancelUrl || openingCancel}
+                  className="w-full"
+                  loading={openingCancel}
+                  loadingText="Opening…"
+                >
+                  Open official cancel page
+                </Button>
+                <p className="text-xs text-muted-foreground">You can cancel anytime on the official page.</p>
+                {!hasCancelUrl ? <p className="text-xs text-muted-foreground">No cancel link available</p> : null}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 p-4 rounded-[20px] border border-white/10 bg-white/5">
+                <div className="space-y-0.5 flex-1">
+                  <label className="text-sm font-medium cursor-pointer text-foreground/90" htmlFor="pause-toggle">
+                    Mark as cancelled
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    This is for your tracking only. It doesn’t cancel anything automatically.
+                  </p>
+                </div>
+                <Checkbox
+                  id="pause-toggle"
+                  checked={subscription.cancelled || false}
+                  onChange={handleTogglePaused}
+                  label=""
+                  disabled={togglingPaused}
+                />
+              </div>
+
+              <Button
+                variant="destructive"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="w-full h-11 text-[15px] font-semibold tracking-tight"
+                loading={deleting}
+                loadingText="Deleting…"
+              >
+                Delete subscription
+              </Button>
+            </div>
+          </div>
+        </GlassSurface>
       </div>
     </PageShell>
   )

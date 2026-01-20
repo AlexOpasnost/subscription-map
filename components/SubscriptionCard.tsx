@@ -1,10 +1,10 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { GlassSurface } from "@/components/ui/GlassSurface"
 import { daysUntilYyyyMmDd, formatRenewalCountdown } from "@/lib/renewals"
 import { formatDisplayDate } from "@/lib/formatDisplayDate"
 
@@ -49,14 +49,14 @@ export default function SubscriptionCard({
     daysUntilRenewal !== null && daysUntilRenewal >= 0 && daysUntilRenewal <= reminderWindow
 
   return (
-    <Card
+    <GlassSurface
+      variant="subtle"
       className={cn(
-        "border border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.02))] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl",
-        "transition-[transform,box-shadow] duration-200",
+        "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] transition-[transform,box-shadow] duration-200",
         cancelled ? "opacity-70" : "hover:-translate-y-px hover:shadow-[0_26px_90px_rgba(0,0,0,0.55)]"
       )}
     >
-      <CardContent className="p-4 sm:p-5">
+      <div className="p-4 sm:p-5">
         <div className="space-y-4">
           {/* Row 1: Service name + plan badge, price right aligned */}
           <div className="flex items-start justify-between gap-3">
@@ -68,7 +68,7 @@ export default function SubscriptionCard({
                   {service}
                 </h3>
                 {plan && (
-                  <Badge variant="secondary" className="text-xs shrink-0">
+                  <Badge variant="secondary" className="text-xs shrink-0 bg-white/5 border-white/10 text-foreground/80">
                     {plan}
                   </Badge>
                 )}
@@ -84,7 +84,7 @@ export default function SubscriptionCard({
                 {showRenewalBadge && (
                   <Badge
                     variant="secondary"
-                    className="text-xs shrink-0 border-[color:color-mix(in_srgb,var(--accent-2)_22%,transparent)] bg-[color:color-mix(in_srgb,var(--accent-2)_10%,transparent)] text-foreground/80"
+                    className="text-xs shrink-0 border-[color:color-mix(in_srgb,var(--accent)_22%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)] text-foreground/85"
                   >
                     {formatRenewalCountdown(daysUntilRenewal)}
                   </Badge>
@@ -128,7 +128,7 @@ export default function SubscriptionCard({
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </GlassSurface>
   )
 }

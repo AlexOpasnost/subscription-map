@@ -15,11 +15,11 @@ type AppHeaderProps = {
 export default function AppHeader({ title, onSignOut, currentPage = "subscriptions" }: AppHeaderProps) {
   return (
     <div className="sticky top-4 z-40 mb-8">
-      <div className="flex items-center justify-between gap-3 rounded-2xl border bg-card/70 backdrop-blur px-4 py-3 shadow-sm">
+      <div className="flex items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-[rgba(19,20,23,0.62)] backdrop-blur-xl px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.45)]">
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={cn(
-              "h-9 w-9 shrink-0 rounded-xl border border-border/70 bg-muted/40",
+              "h-9 w-9 shrink-0 rounded-xl border border-white/10 bg-white/5",
               "flex items-center justify-center"
             )}
             aria-hidden="true"

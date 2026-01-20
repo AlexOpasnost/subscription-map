@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
@@ -18,6 +17,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Sparkles } from "lucide-react"
+import { GlassSurface } from "@/components/ui/GlassSurface"
 
 interface Subscription {
   id: string
@@ -113,26 +113,26 @@ export default function AppPage() {
       <PageShell>
         <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
         <div className="mx-auto w-full max-w-[720px] space-y-5">
-          <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-            <CardContent className="p-6 sm:p-8 text-center">
+          <GlassSurface>
+            <div className="p-6 sm:p-8 text-center">
               <div className="space-y-4">
                 <Skeleton className="h-4 w-20 mx-auto opacity-60" />
                 <Skeleton className="h-14 w-44 mx-auto opacity-70" />
                 <Skeleton className="h-5 w-28 mx-auto opacity-60" />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
 
-          <Card className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-            <CardContent className="p-4 sm:p-5">
+          <GlassSurface variant="subtle">
+            <div className="p-4 sm:p-5">
               <Skeleton className="h-10 w-full opacity-60" />
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
 
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <Card key={i} className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                <CardContent className="p-4 sm:p-5">
+              <GlassSurface key={i} variant="subtle">
+                <div className="p-4 sm:p-5">
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="space-y-2 flex-1 min-w-0">
@@ -146,8 +146,8 @@ export default function AppPage() {
                     </div>
                     <Skeleton className="h-9 w-28 opacity-60" />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </GlassSurface>
             ))}
           </div>
         </div>
@@ -158,21 +158,12 @@ export default function AppPage() {
   return (
     <PageShell>
       <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
-      
-      <div className="relative mx-auto w-full max-w-[720px] space-y-5">
-        <div
-          className="pointer-events-none absolute -inset-x-6 -top-10 -bottom-10"
-          aria-hidden="true"
-          style={{
-            background:
-              "radial-gradient(900px 520px at 50% 0%, rgba(59,130,246,0.10), transparent 62%)," +
-              "radial-gradient(900px 600px at 50% 110%, rgba(255,255,255,0.04), transparent 60%)",
-          }}
-        />
+
+      <div className="mx-auto w-full max-w-[720px] space-y-5">
 
         {loadError && subscriptions.length > 0 ? (
-          <Card className="border border-white/8 bg-white/[0.04] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-            <CardContent className="p-5 sm:p-6">
+          <GlassSurface variant="subtle">
+            <div className="p-5 sm:p-6">
               <div className="space-y-2">
                 <div className="text-sm font-semibold text-foreground/90">We couldn’t load your subscriptions</div>
                 <div className="text-sm text-muted-foreground">{loadError}</div>
@@ -189,8 +180,8 @@ export default function AppPage() {
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
         ) : null}
 
         {loadError && subscriptions.length === 0 ? (
@@ -206,8 +197,8 @@ export default function AppPage() {
         ) : null}
 
         {loadError && subscriptions.length === 0 ? null : (
-          <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-            <CardContent className="p-6 sm:p-8 text-center">
+          <GlassSurface>
+            <div className="p-6 sm:p-8 text-center">
               <div className="space-y-4">
                 <p className="text-sm font-medium tracking-tight text-muted-foreground">You spend</p>
                 <div className="text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums text-foreground/95">
@@ -217,14 +208,14 @@ export default function AppPage() {
                   ${totalYearly.toFixed(0)} / year
                 </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </GlassSurface>
         )}
 
         {subscriptions.length === 0 && !loadError ? (
           <>
-            <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-              <CardContent className="p-6 sm:p-8 text-center">
+            <GlassSurface>
+              <div className="p-6 sm:p-8 text-center">
                 <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
                   <Sparkles className="h-5 w-5 text-foreground/80" aria-hidden="true" />
                 </div>
@@ -255,8 +246,8 @@ export default function AppPage() {
                     <span>Open cancel links directly</span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </GlassSurface>
             <AddSubscriptionForm
               onSuccess={(created) => {
                 if (created) {
@@ -296,8 +287,8 @@ export default function AppPage() {
               if (upcoming.length === 0) return null
 
               return (
-                <Card className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
-                  <CardContent className="p-5 sm:p-6">
+                <GlassSurface variant="subtle">
+                  <div className="p-5 sm:p-6">
                     <div className="flex items-center justify-between gap-3 mb-4">
                       <div>
                         <div className="text-sm font-semibold text-foreground/90">Upcoming renewals</div>
@@ -320,8 +311,8 @@ export default function AppPage() {
                         </div>
                       ))}
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                </GlassSurface>
               )
             })()}
             

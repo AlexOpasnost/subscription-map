@@ -7,7 +7,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import { Card, CardContent } from "@/components/ui/card"
+import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
@@ -260,7 +260,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   }
 
   return (
-    <Card className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+    <GlassSurface variant="subtle" className="p-0">
       <Accordion 
         type="single" 
         collapsible 
@@ -270,7 +270,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       >
         <AccordionItem value="add-subscription" className="border-none">
           <AccordionTrigger
-            className="px-5 py-4 hover:no-underline rounded-2xl bg-white/[0.02] text-foreground/90 border border-white/8 transition-colors hover:bg-accent"
+            className="px-5 sm:px-6 py-4 hover:no-underline rounded-[24px] text-foreground/90 transition-colors hover:bg-white/5 data-[state=open]:bg-white/5"
             disabled={loading}
           >
             <span className="flex items-center gap-2 text-base font-semibold tracking-tight">
@@ -278,12 +278,12 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
               Add subscription
             </span>
           </AccordionTrigger>
-          <AccordionContent>
-            <CardContent className="pt-0 pb-5 px-5 sm:px-6">
+          <AccordionContent className="px-5 sm:px-6 pb-6 pt-0">
+            <div>
               <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="service">
-                    Service <span className="text-destructive">*</span>
+                    Service <span className="text-muted-foreground">*</span>
                   </Label>
                   <div className="relative">
                     <Input
@@ -353,7 +353,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
                 <div className="space-y-2">
                   <Label htmlFor="price">
-                    Price <span className="text-destructive">*</span>
+                    Price <span className="text-muted-foreground">*</span>
                   </Label>
                   <Input
                     id="price"
@@ -433,10 +433,10 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   </Button>
                 </div>
               </form>
-            </CardContent>
+            </div>
           </AccordionContent>
         </AccordionItem>
       </Accordion>
-    </Card>
+    </GlassSurface>
   )
 }
