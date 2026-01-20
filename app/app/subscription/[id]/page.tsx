@@ -452,11 +452,11 @@ export default function SubscriptionDetailsPage() {
                       side="bottom"
                       align="start"
                       collisionPadding={12}
-                      className="w-[340px] p-0 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+                      className="w-auto p-0 min-w-[320px] bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
                     >
-                      <div className="min-h-[320px] p-3">
+                      <div className="min-h-[320px]">
                         <Calendar
-                          className="w-full"
+                          className="p-3 [&_*]:whitespace-nowrap"
                           fixedWeeks
                           mode="single"
                           selected={selectedRenewalDate}
