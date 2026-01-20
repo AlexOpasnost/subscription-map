@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import PageShell from "@/components/PageShell"
 import { useToast } from "@/components/ToastProvider"
 import { supabase } from "@/lib/supabase/client"
 import { getRedirectUrl } from "@/lib/getRedirectUrl"
@@ -181,118 +180,138 @@ export default function LoginPage() {
   }
 
   return (
-    <PageShell>
-      <div className="mx-auto w-full max-w-md pt-14 sm:pt-20">
+    <div className="relative min-h-dvh px-4 py-10 sm:py-14 flex items-center justify-center">
+      <div
+        className="pointer-events-none absolute inset-0"
+        aria-hidden="true"
+        style={{
+          background:
+            "radial-gradient(1100px 700px at 50% 35%, rgba(255,255,255,0.06), transparent 60%)," +
+            "radial-gradient(900px 600px at 50% 35%, rgba(59,130,246,0.10), transparent 62%)," +
+            "radial-gradient(900px 700px at 50% 120%, rgba(0,0,0,0.55), transparent 55%)",
+        }}
+      />
+
+      <div className="relative mx-auto w-full max-w-md">
         <div className="mb-10 text-center space-y-3">
-          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-foreground">
             See all your subscriptions in one place
           </h1>
           <p className="text-base sm:text-lg text-muted-foreground">
             Track monthly spending, spot forgotten subscriptions, and stay in control of your money.
           </p>
         </div>
-        <Card className="rounded-2xl shadow-sm border bg-card">
-        <CardHeader className="space-y-1">
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>Use a password or continue with Google.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {inlineNotice ? (
-            <div className="mb-4 rounded-lg border bg-muted/40 px-4 py-3">
-              <div className="text-sm font-semibold">{inlineNotice.title}</div>
-              {inlineNotice.description ? (
-                <div className="mt-1 text-sm text-muted-foreground">{inlineNotice.description}</div>
-              ) : null}
-              {inlineNotice.action === "check-email" ? (
-                <div className="mt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => router.push(`/check-email?email=${encodeURIComponent(email.trim())}`)}
-                    disabled={!!loadingAction}
-                  >
-                    Check your email
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          <form onSubmit={handlePasswordSignIn} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
+
+        <Card className="border-0 bg-[rgba(19,20,23,0.72)] shadow-[0_20px_70px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-foreground/90">Sign in</CardTitle>
+            <CardDescription>Use a password or continue with Google.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {inlineNotice ? (
+              <div className="mb-5 rounded-2xl bg-black/20 px-4 py-3">
+                <div className="text-sm font-semibold text-foreground/90">{inlineNotice.title}</div>
+                {inlineNotice.description ? (
+                  <div className="mt-1 text-sm text-muted-foreground">{inlineNotice.description}</div>
+                ) : null}
+                {inlineNotice.action === "check-email" ? (
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => router.push(`/check-email?email=${encodeURIComponent(email.trim())}`)}
+                      disabled={!!loadingAction}
+                    >
+                      Check your email
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <form onSubmit={handlePasswordSignIn} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-foreground/80">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                  disabled={!!loadingAction}
+                  className="bg-white/5 border-white/10 focus-visible:border-[color:var(--accent)] focus-visible:ring-[color:var(--accent)]/25"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-foreground/80">
+                  Password
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                  disabled={!!loadingAction}
+                  className="bg-white/5 border-white/10 focus-visible:border-[color:var(--accent)] focus-visible:ring-[color:var(--accent)]/25"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-11 text-[15px] font-semibold tracking-tight text-white border-0 bg-[linear-gradient(180deg,rgba(59,130,246,0.98),rgba(37,99,235,0.98))] shadow-[0_10px_30px_rgba(59,130,246,0.18)] hover:shadow-[0_14px_40px_rgba(59,130,246,0.24)] hover:brightness-105"
                 disabled={!!loadingAction}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
+                loading={loadingAction === "password-signin"}
+                loadingText="Signing in…"
+              >
+                Sign in
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full h-11 text-[15px] text-foreground/85 hover:text-foreground hover:bg-white/5"
+                onClick={handlePasswordSignUp}
                 disabled={!!loadingAction}
-              />
-            </div>
+                loading={loadingAction === "password-signup"}
+                loadingText="Creating…"
+              >
+                Create account
+              </Button>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={!!loadingAction}
-              loading={loadingAction === "password-signin"}
-              loadingText="Signing in…"
-            >
-              Sign in
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handlePasswordSignUp}
-              disabled={!!loadingAction}
-              loading={loadingAction === "password-signup"}
-              loadingText="Creating…"
-            >
-              Create account
-            </Button>
+              <p className="text-sm text-muted-foreground">
+                Not registered yet? Click <span className="font-medium text-foreground/90">Create account</span>.
+              </p>
 
-            <p className="text-sm text-muted-foreground">
-              Not registered yet? Click <span className="font-medium text-foreground">Create account</span>.
-            </p>
+              <div className="flex items-center gap-3 pt-1">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
 
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">or</span>
-              <div className="h-px flex-1 bg-border" />
-            </div>
-
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={handleGoogleSignIn}
-              disabled={!!loadingAction}
-              loading={loadingAction === "google"}
-              loadingText="Redirecting…"
-            >
-              Continue with Google
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-11 text-[15px] bg-transparent border-white/12 text-foreground/85 hover:text-foreground hover:bg-white/5"
+                onClick={handleGoogleSignIn}
+                disabled={!!loadingAction}
+                loading={loadingAction === "google"}
+                loadingText="Redirecting…"
+              >
+                Continue with Google
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
-    </PageShell>
+    </div>
   )
 }
 
