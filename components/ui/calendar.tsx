@@ -28,13 +28,13 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         nav_button_next: "absolute right-1",
         table: "w-full border-collapse space-y-1",
         // Keep shadcn’s flex-based head/rows.
-        head_row: "flex",
+        head_row: "flex w-full justify-between",
         head_cell:
           // Fixed widths + no overlap for weekday labels.
-          "w-9 shrink-0 whitespace-nowrap leading-none rounded-md font-normal text-[0.8rem] text-muted-foreground text-center",
-        row: "flex w-full mt-2",
+          "w-9 shrink-0 text-[0.8rem] font-normal text-muted-foreground text-center leading-none",
+        row: "flex w-full justify-between mt-2",
         // Fixed 7-column grid sizing.
-        cell: "h-9 w-9 text-center p-0 text-sm relative focus-within:relative focus-within:z-20",
+        cell: "h-9 w-9 shrink-0 text-center p-0 relative",
         day: cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "h-9 w-9 p-0 font-normal aria-selected:opacity-100"),
         day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
         day_today: "bg-accent text-accent-foreground",
