@@ -259,7 +259,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   }
 
   return (
-    <Card className="rounded-2xl shadow-sm border bg-card">
+    <Card className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
       <Accordion 
         type="single" 
         collapsible 
@@ -269,13 +269,13 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       >
         <AccordionItem value="add-subscription" className="border-none">
           <AccordionTrigger
-            className="px-4 py-3 hover:no-underline rounded-2xl bg-muted/20 text-foreground/90 shadow-sm border border-border/70 transition-colors hover:bg-accent"
+            className="px-5 py-4 hover:no-underline rounded-2xl bg-white/[0.02] text-foreground/90 border border-white/8 transition-colors hover:bg-accent"
             disabled={loading}
           >
-            <span className="text-base font-medium">+ Add subscription</span>
+            <span className="text-base font-semibold tracking-tight">+ Add subscription</span>
           </AccordionTrigger>
           <AccordionContent>
-            <CardContent className="pt-0 pb-4">
+            <CardContent className="pt-0 pb-5 px-5 sm:px-6">
               <form onSubmit={handleSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="service">
@@ -305,13 +305,13 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     {showServiceDropdown && filteredServices.length > 0 && (
                       <div
                         ref={serviceDropdownRef}
-                        className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
+                        className="absolute z-50 w-full mt-2 bg-popover border border-white/10 rounded-2xl shadow-[0_18px_60px_rgba(0,0,0,0.65)] max-h-60 overflow-auto backdrop-blur-xl"
                       >
                         {filteredServices.map((service) => (
                           <button
                             key={service.serviceName}
                             type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
+                            className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
                             onClick={() => handleServiceSelect(service.serviceName)}
                             disabled={loading}
                           >

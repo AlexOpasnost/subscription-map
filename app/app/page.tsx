@@ -111,33 +111,39 @@ export default function AppPage() {
     return (
       <PageShell>
         <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
-        <div className="space-y-6">
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardContent className="p-6 sm:p-8">
-              <div className="space-y-3 text-center">
-                <Skeleton className="h-4 w-24 mx-auto" />
-                <Skeleton className="h-12 w-40 mx-auto" />
-                <Skeleton className="h-5 w-28 mx-auto" />
+        <div className="mx-auto w-full max-w-[720px] space-y-5">
+          <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+            <CardContent className="p-6 sm:p-8 text-center">
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-20 mx-auto opacity-60" />
+                <Skeleton className="h-14 w-44 mx-auto opacity-70" />
+                <Skeleton className="h-5 w-28 mx-auto opacity-60" />
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            <CardContent className="p-4 sm:p-5">
+              <Skeleton className="h-10 w-full opacity-60" />
             </CardContent>
           </Card>
 
           <div className="space-y-3">
             {[0, 1, 2].map((i) => (
-              <Card key={i} className="rounded-2xl shadow-sm border bg-card">
-                <CardContent className="p-4">
-                  <div className="space-y-3">
-                    <div className="flex items-start justify-between gap-3">
+              <Card key={i} className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                <CardContent className="p-4 sm:p-5">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4">
                       <div className="space-y-2 flex-1 min-w-0">
-                        <Skeleton className="h-5 w-40" />
-                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-5 w-48 opacity-70" />
+                        <Skeleton className="h-4 w-32 opacity-60" />
                       </div>
                       <div className="space-y-2 text-right shrink-0">
-                        <Skeleton className="h-6 w-20 ml-auto" />
-                        <Skeleton className="h-3 w-10 ml-auto" />
+                        <Skeleton className="h-7 w-20 ml-auto opacity-70" />
+                        <Skeleton className="h-3 w-12 ml-auto opacity-60" />
                       </div>
                     </div>
-                    <Skeleton className="h-8 w-28" />
+                    <Skeleton className="h-9 w-28 opacity-60" />
                   </div>
                 </CardContent>
               </Card>
@@ -152,12 +158,12 @@ export default function AppPage() {
     <PageShell>
       <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
       
-      <div className="space-y-6">
+      <div className="mx-auto w-full max-w-[720px] space-y-5">
         {loadError && subscriptions.length > 0 ? (
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardContent className="p-4 sm:p-6">
+          <Card className="border border-white/8 bg-white/[0.04] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+            <CardContent className="p-5 sm:p-6">
               <div className="space-y-2">
-                <div className="text-sm font-semibold">We couldn’t load your subscriptions</div>
+                <div className="text-sm font-semibold text-foreground/90">We couldn’t load your subscriptions</div>
                 <div className="text-sm text-muted-foreground">{loadError}</div>
                 <div className="pt-2">
                   <Button
@@ -188,59 +194,15 @@ export default function AppPage() {
           />
         ) : null}
 
-        {(() => {
-          if (loadError && subscriptions.length === 0) return null
-          const upcoming = subscriptions
-            .filter((s) => !s.cancelled && !!s.renewal_date)
-            .map((s) => {
-              const daysUntil = s.renewal_date ? daysUntilYyyyMmDd(s.renewal_date) : null
-              return { sub: s, daysUntil }
-            })
-            .filter((x) => x.daysUntil !== null && (x.daysUntil as number) >= 0)
-            .sort((a, b) => (a.daysUntil as number) - (b.daysUntil as number))
-            .slice(0, 3)
-
-          if (upcoming.length === 0) return null
-
-          return (
-            <Card className="rounded-2xl shadow-sm border bg-card">
-              <CardContent className="p-4 sm:p-6">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <div>
-                    <div className="text-sm font-semibold">Upcoming renewals</div>
-                    <div className="text-xs text-muted-foreground">Next 3 renewals based on your dates.</div>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {upcoming.map(({ sub, daysUntil }) => (
-                    <div key={sub.id} className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium truncate">{sub.service}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {(formatDisplayDate(sub.renewal_date) ?? sub.renewal_date) as string} •{" "}
-                          {formatRenewalCountdown(daysUntil as number)}
-                        </div>
-                      </div>
-                      <Button asChild size="sm" variant="outline" className="shrink-0">
-                        <Link href={`/app/subscription/${sub.id}`}>Manage</Link>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })()}
-
         {loadError && subscriptions.length === 0 ? null : (
-          <Card className="rounded-2xl shadow-sm border bg-card">
-            <CardContent className="p-8 sm:p-10 text-center">
+          <Card className="border border-white/8 bg-white/[0.04] shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+            <CardContent className="p-6 sm:p-8 text-center">
               <div className="space-y-4">
-                <p className="text-sm font-medium text-muted-foreground tracking-tight">You spend</p>
-                <div className="text-5xl sm:text-6xl font-bold tracking-tight tabular-nums">
+                <p className="text-sm font-medium tracking-tight text-muted-foreground">You spend</p>
+                <div className="text-5xl sm:text-6xl font-semibold tracking-tight tabular-nums text-foreground/95">
                   ${totalMonthly.toFixed(2)}
                 </div>
-                <p className="text-base sm:text-lg text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   ${totalYearly.toFixed(0)} / year
                 </p>
               </div>
@@ -275,6 +237,51 @@ export default function AppPage() {
           </>
         ) : loadError && subscriptions.length === 0 ? null : (
           <>
+            {(() => {
+              // Subtle, optional utility panel (kept low-noise, no extra colors).
+              if (loadError) return null
+              const upcoming = subscriptions
+                .filter((s) => !s.cancelled && !!s.renewal_date)
+                .map((s) => {
+                  const daysUntil = s.renewal_date ? daysUntilYyyyMmDd(s.renewal_date) : null
+                  return { sub: s, daysUntil }
+                })
+                .filter((x) => x.daysUntil !== null && (x.daysUntil as number) >= 0)
+                .sort((a, b) => (a.daysUntil as number) - (b.daysUntil as number))
+                .slice(0, 3)
+
+              if (upcoming.length === 0) return null
+
+              return (
+                <Card className="border border-white/8 bg-white/[0.03] shadow-[0_18px_70px_rgba(0,0,0,0.45)] backdrop-blur-xl">
+                  <CardContent className="p-5 sm:p-6">
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div>
+                        <div className="text-sm font-semibold text-foreground/90">Upcoming renewals</div>
+                        <div className="text-xs text-muted-foreground">Next 3 renewals based on your dates.</div>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {upcoming.map(({ sub, daysUntil }) => (
+                        <div key={sub.id} className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium truncate text-foreground/90">{sub.service}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {(formatDisplayDate(sub.renewal_date) ?? sub.renewal_date) as string} •{" "}
+                              {formatRenewalCountdown(daysUntil as number)}
+                            </div>
+                          </div>
+                          <Button asChild size="sm" variant="outline" className="shrink-0">
+                            <Link href={`/app/subscription/${sub.id}`}>Manage</Link>
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )
+            })()}
+
             <AddSubscriptionForm
               onSuccess={(created) => {
                 if (created) {
