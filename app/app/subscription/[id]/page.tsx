@@ -452,9 +452,9 @@ export default function SubscriptionDetailsPage() {
                       side="bottom"
                       align="start"
                       collisionPadding={12}
-                      className="w-[340px] sm:w-[360px] p-0 overflow-hidden"
+                      className="w-[340px] p-0 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
                     >
-                      <div className="p-3 min-h-[320px]">
+                      <div className="min-h-[320px] p-3">
                         <Calendar
                           className="w-full"
                           fixedWeeks
