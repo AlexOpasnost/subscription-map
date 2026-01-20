@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { List, LogOut, Map } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -19,12 +20,19 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
         <div className="flex items-center gap-3 min-w-0">
           <div
             className={cn(
-              "h-9 w-9 shrink-0 rounded-xl border border-white/10 bg-white/5",
-              "flex items-center justify-center"
+              "h-9 w-9 shrink-0 rounded-xl border border-white/10 bg-transparent",
+              "flex items-center justify-center overflow-hidden"
             )}
             aria-hidden="true"
           >
-            <span className="text-xs font-semibold tracking-tight text-foreground/90">SM</span>
+            <Image
+              src="/logo.png"
+              alt="Subscription Map"
+              width={24}
+              height={24}
+              priority
+              className="rounded-sm"
+            />
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-base sm:text-lg font-medium tracking-tight">{title}</h1>

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { ToastProvider } from "@/components/ToastProvider";
+import { getAppUrl } from "@/lib/getAppUrl";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,41 +15,31 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/+$/, "") ||
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-
 export const metadata: Metadata = {
-  metadataBase: new URL(siteUrl),
-  applicationName: "Subscriptions",
-  title: {
-    default: "Subscriptions \u2013 Track your subscriptions",
-    template: "%s \u2013 Track your subscriptions",
-  },
-  description: "Track all your subscriptions in one place",
+  metadataBase: new URL(getAppUrl()),
+  applicationName: "Subscription Map",
+  title: "Subscription Map",
+  description: "Track monthly spending, spot forgotten subscriptions, and stay in control of your money.",
   icons: {
-    icon: [{ url: "/logo.png", type: "image/png" }],
-    apple: [{ url: "/logo.png", type: "image/png" }],
-    shortcut: [{ url: "/logo.png", type: "image/png" }],
+    icon: "/logo.png",
+    apple: "/logo.png",
   },
   openGraph: {
     type: "website",
-    siteName: "Subscriptions",
-    title: "Subscriptions \u2013 Track your subscriptions",
-    description: "Track all your subscriptions in one place",
+    siteName: "Subscription Map",
+    title: "Subscription Map",
+    description: "Track monthly spending, spot forgotten subscriptions, and stay in control of your money.",
     images: [
       {
         url: "/logo.png",
-        width: 1024,
-        height: 1024,
-        alt: "Subscriptions",
+        alt: "Subscription Map",
       },
     ],
   },
   twitter: {
     card: "summary",
-    title: "Subscriptions \u2013 Track your subscriptions",
-    description: "Track all your subscriptions in one place",
+    title: "Subscription Map",
+    description: "Track monthly spending, spot forgotten subscriptions, and stay in control of your money.",
     images: ["/logo.png"],
   },
 };
