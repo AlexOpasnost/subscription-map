@@ -27,11 +27,12 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
           "h-8 w-8 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
         ),
-        table: "w-full border-collapse",
-        head_row: "flex justify-between",
-        head_cell: "w-9 text-xs text-white/40 text-center",
-        row: "flex w-full justify-between mt-2",
-        cell: "h-9 w-9 text-center",
+        // Force real table semantics (protect against global CSS overrides).
+        table: "w-full table-fixed border-separate border-spacing-y-2 border-spacing-x-0",
+        head_row: "table-row",
+        head_cell: "table-cell h-8 align-middle text-xs text-white/40 text-center",
+        row: "table-row",
+        cell: "table-cell p-0 align-middle text-center",
         day: cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
           "h-9 w-9 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
