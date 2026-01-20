@@ -17,7 +17,7 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
         formatWeekdayName: (day) =>
           day.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2),
       }}
-      className={cn("w-full", className)}
+      className={cn("sm-calendar w-full", className)}
       classNames={{
         months: "flex w-full justify-center",
         month: "w-full",
@@ -27,15 +27,16 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
           "h-8 w-8 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
         ),
-        // Force real table semantics (protect against global CSS overrides).
-        table: "w-full table-fixed border-separate border-spacing-y-2 border-spacing-x-0",
+        // Enforce stable 7-column table layout (defensive vs global CSS overrides).
+        table: "w-full table-fixed border-collapse",
         head_row: "table-row",
-        head_cell: "table-cell h-8 align-middle text-xs text-white/40 text-center",
+        head_cell:
+          "table-cell w-9 min-w-9 h-8 align-middle text-xs text-white/40 text-center leading-none whitespace-nowrap",
         row: "table-row",
-        cell: "table-cell p-0 align-middle text-center",
+        cell: "table-cell w-9 min-w-9 p-0 align-middle text-center",
         day: cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "h-9 w-9 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
+          "h-9 w-9 min-w-9 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
         ),
         day_selected: "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md",
         day_today: "border border-white/30",
