@@ -1,6 +1,3 @@
-import { format } from "date-fns"
-import { enUS } from "date-fns/locale"
-
 /**
  * Format a stored ISO date (YYYY-MM-DD) for consistent English UI display.
  *
@@ -19,11 +16,9 @@ export function formatDisplayDate(isoDate: string | null | undefined): string | 
   const mo = Number(m[2]) - 1
   const d = Number(m[3])
 
-  // Use local midnight so formatting never shifts the calendar day across timezones.
-  const dt = new Date(y, mo, d)
+  // Use UTC midnight so formatting never shifts the calendar day across timezones.
+  const dt = new Date(Date.UTC(y, mo, d))
   if (Number.isNaN(dt.getTime())) return null
-  if (dt.getFullYear() !== y || dt.getMonth() !== mo || dt.getDate() !== d) return null
-
-  return format(dt, "MMM d, yyyy", { locale: enUS })
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dt)
 }
 

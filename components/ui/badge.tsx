@@ -11,7 +11,7 @@ const badgeVariants = cva(
         default: "border-border/70 bg-muted/40 text-foreground/90",
         secondary: "border-border/70 bg-muted/20 text-muted-foreground",
         success:
-          "border-[color:color-mix(in_srgb,var(--success)_28%,transparent)] bg-[color:color-mix(in_srgb,var(--success)_16%,transparent)] text-[color:var(--success)]",
+          "border-[color:color-mix(in_srgb,var(--success)_35%,transparent)] bg-transparent text-[color:color-mix(in_srgb,var(--success)_85%,white)]",
         warning:
           "border-[color:color-mix(in_srgb,var(--accent)_28%,transparent)] bg-[color:color-mix(in_srgb,var(--accent)_14%,transparent)] text-[color:var(--accent)]",
         destructive:

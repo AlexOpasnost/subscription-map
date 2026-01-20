@@ -5,10 +5,10 @@ import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
-import { DatePicker } from "@/components/ui/date-picker"
 import {
   Select,
   SelectContent,
@@ -48,6 +48,18 @@ function normalizeIsoYyyyMmDd(value: string | null | undefined): string {
   // normalize it to YYYY-MM-DD for the native date input.
   const m = /^(\d{4}-\d{2}-\d{2})/.exec(s)
   return m ? m[1] : ""
+}
+
+function formatDisplayDateEnUs(isoYyyyMmDd: string): string | null {
+  const s = isoYyyyMmDd.trim()
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s)
+  if (!m) return null
+  const y = Number(m[1])
+  const mo = Number(m[2]) - 1
+  const d = Number(m[3])
+  const dt = new Date(Date.UTC(y, mo, d))
+  if (Number.isNaN(dt.getTime())) return null
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(dt)
 }
 
 export default function SubscriptionDetailsPage() {
@@ -402,12 +414,20 @@ export default function SubscriptionDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="renewal-date">Next renewal</Label>
-                <DatePicker
-                  id="renewal-date"
-                  value={renewalDate}
-                  onChange={(next) => setRenewalDate(next ?? "")}
-                  disabled={savingHelper}
-                />
+                <div className="space-y-2">
+                  <Input
+                    id="renewal-date"
+                    type="date"
+                    value={renewalDate}
+                    onChange={(e) => setRenewalDate(e.target.value)}
+                    disabled={savingHelper}
+                  />
+                  {renewalDate ? (
+                    <div className="text-xs text-muted-foreground">
+                      {formatDisplayDateEnUs(renewalDate) ?? renewalDate}
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="reminder-days">Reminder</Label>
