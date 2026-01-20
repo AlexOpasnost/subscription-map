@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { DayPicker, type DayPickerProps } from "react-day-picker"
-import { ChevronDown } from "lucide-react"
+import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
@@ -13,53 +13,43 @@ function Calendar({ className, classNames, showOutsideDays = true, ...props }: C
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      formatters={{
-        formatWeekdayName: (day) =>
-          day.toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2),
-      }}
-      className={cn("sm-calendar w-full", className)}
+      className={cn("p-3", className)}
       classNames={{
-        months: "flex w-full justify-center",
-        month: "w-full",
-        caption: "flex justify-between items-center mb-2",
-        caption_label: "text-sm font-medium text-white/80",
+        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+        month: "space-y-4",
+        caption: "flex justify-center pt-1 relative items-center",
+        caption_label: "text-sm font-medium",
+        nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "h-8 w-8 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
+          "h-7 w-7 bg-transparent p-0 opacity-50 hover:opacity-100"
         ),
-        // Enforce stable 7-column table layout (defensive vs global CSS overrides).
-        table: "w-full table-fixed border-collapse",
-        head_row: "table-row",
+        nav_button_previous: "absolute left-1",
+        nav_button_next: "absolute right-1",
+        table: "w-full border-collapse space-y-1",
+        // Keep shadcn’s flex-based head/rows.
+        head_row: "flex",
         head_cell:
-          "table-cell w-9 min-w-9 h-8 align-middle text-xs text-white/40 text-center leading-none whitespace-nowrap",
-        row: "table-row",
-        cell: "table-cell w-9 min-w-9 p-0 align-middle text-center",
-        day: cn(
-          buttonVariants({ variant: "ghost", size: "icon-sm" }),
-          "h-9 w-9 min-w-9 rounded-full hover:bg-white/10 focus-visible:ring-[color:var(--accent)]/25 focus-visible:ring-[3px]"
-        ),
-        day_selected: "bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-md",
-        day_today: "border border-white/30",
-        day_outside: "text-white/20",
-        day_disabled: "text-white/20",
+          // Fixed widths + no overlap for weekday labels.
+          "w-9 shrink-0 whitespace-nowrap leading-none rounded-md font-normal text-[0.8rem] text-muted-foreground text-center",
+        row: "flex w-full mt-2",
+        // Fixed 7-column grid sizing.
+        cell: "h-9 w-9 text-center p-0 text-sm relative focus-within:relative focus-within:z-20",
+        day: cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "h-9 w-9 p-0 font-normal aria-selected:opacity-100"),
+        day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+        day_today: "bg-accent text-accent-foreground",
+        day_outside: "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+        day_disabled: "text-muted-foreground opacity-50",
+        day_hidden: "invisible",
         ...classNames,
       }}
       components={{
         Chevron: ({ className, orientation, ...iconProps }) => (
-          <ChevronDown
-            className={cn(
-              "size-4 opacity-70",
-              orientation === "left"
-                ? "rotate-90"
-                : orientation === "right"
-                  ? "-rotate-90"
-                  : orientation === "up"
-                    ? "rotate-180"
-                    : "",
-              className
-            )}
-            {...iconProps}
-          />
+          orientation === "left" ? (
+            <ChevronLeft className={cn("size-4", className)} {...iconProps} />
+          ) : (
+            <ChevronRight className={cn("size-4", className)} {...iconProps} />
+          )
         ),
       }}
       {...props}
