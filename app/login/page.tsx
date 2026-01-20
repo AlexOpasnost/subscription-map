@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import PageShell from "@/components/PageShell"
 import { useToast } from "@/components/ToastProvider"
 import { supabase } from "@/lib/supabase/client"
 import { getRedirectUrl } from "@/lib/getRedirectUrl"
@@ -180,16 +181,17 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-md py-24 px-4">
-      <div className="mb-12 text-center space-y-4">
-        <h1 className="text-4xl font-bold tracking-tight">
-          See all your subscriptions in one place
-        </h1>
-        <p className="text-lg text-muted-foreground">
-          Track monthly spending, spot forgotten subscriptions, and stay in control of your money.
-        </p>
-      </div>
-      <Card className="rounded-2xl shadow-sm border bg-card">
+    <PageShell>
+      <div className="mx-auto w-full max-w-md pt-14 sm:pt-20">
+        <div className="mb-10 text-center space-y-3">
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight">
+            See all your subscriptions in one place
+          </h1>
+          <p className="text-base sm:text-lg text-muted-foreground">
+            Track monthly spending, spot forgotten subscriptions, and stay in control of your money.
+          </p>
+        </div>
+        <Card className="rounded-2xl shadow-sm border bg-card">
         <CardHeader className="space-y-1">
           <CardTitle>Sign in</CardTitle>
           <CardDescription>Use a password or continue with Google.</CardDescription>
@@ -289,7 +291,8 @@ export default function LoginPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+      </div>
+    </PageShell>
   )
 }
 

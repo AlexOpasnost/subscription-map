@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
-import HeaderBar from "@/components/HeaderBar"
+import AppHeader from "@/components/AppHeader"
 import SubscriptionCard from "@/components/SubscriptionCard"
 import AddSubscriptionForm from "@/components/AddSubscriptionForm"
 import EmptyState from "@/components/EmptyState"
@@ -110,7 +110,7 @@ export default function AppPage() {
   if (loading) {
     return (
       <PageShell>
-        <HeaderBar title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
+        <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
         <div className="space-y-6">
           <Card className="rounded-2xl shadow-sm border bg-card">
             <CardContent className="p-6 sm:p-8">
@@ -150,7 +150,7 @@ export default function AppPage() {
 
   return (
     <PageShell>
-      <HeaderBar title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
+      <AppHeader title="Subscriptions" onSignOut={signOut} currentPage="subscriptions" />
       
       <div className="space-y-6">
         {loadError && subscriptions.length > 0 ? (

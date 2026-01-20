@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import PageShell from "@/components/PageShell"
-import HeaderBar from "@/components/HeaderBar"
+import AppHeader from "@/components/AppHeader"
 import EmptyState from "@/components/EmptyState"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
@@ -33,30 +33,9 @@ interface Position {
   monthlyCost: number
 }
 
-// Deterministic color mapping from category to Tailwind color classes
-const categoryColors = [
-  "fill-blue-500",
-  "fill-green-500",
-  "fill-purple-500",
-  "fill-orange-500",
-  "fill-pink-500",
-  "fill-cyan-500",
-  "fill-yellow-500",
-  "fill-red-500",
-  "fill-indigo-500",
-  "fill-teal-500",
-  "fill-amber-500",
-  "fill-emerald-500",
-]
-
-function getCategoryColor(category: string): string {
-  // Simple hash function for deterministic color assignment
-  let hash = 0
-  for (let i = 0; i < category.length; i++) {
-    hash = ((hash << 5) - hash + category.charCodeAt(i)) | 0
-  }
-  const index = Math.abs(hash) % categoryColors.length
-  return categoryColors[index]
+function getCategoryColor(_category: string): string {
+  // Calm, dark-first map: keep visual noise low and let circle size carry meaning.
+  return "fill-primary/55"
 }
 
 function getMonthlyCost(subscription: Subscription): number {
@@ -199,7 +178,7 @@ export default function MapPage() {
   if (loading) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
+        <AppHeader title="Subscription Map" onSignOut={signOut} currentPage="map" />
         <div className="space-y-6">
           <Card className="rounded-2xl shadow-sm border bg-card">
             <CardHeader>
@@ -234,7 +213,7 @@ export default function MapPage() {
   if (subscriptions.length === 0) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
+        <AppHeader title="Subscription Map" onSignOut={signOut} currentPage="map" />
         <EmptyState
           title="No subscriptions to visualize"
           description="Add subscriptions to see them on the map."
@@ -247,7 +226,7 @@ export default function MapPage() {
 
   return (
     <PageShell>
-      <HeaderBar title="Subscription Map" onSignOut={signOut} currentPage="map" />
+      <AppHeader title="Subscription Map" onSignOut={signOut} currentPage="map" />
       
       <div className="space-y-6">
           {loadError && (

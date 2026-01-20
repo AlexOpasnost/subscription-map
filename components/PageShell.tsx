@@ -6,8 +6,8 @@ interface PageShellProps {
 
 export default function PageShell({ children }: PageShellProps) {
   return (
-    <div className="min-h-screen bg-muted/30">
-      <div className="max-w-screen-sm md:max-w-3xl mx-auto px-4 py-6 sm:py-8 pb-10">
+    <div className="min-h-dvh bg-background">
+      <div className="mx-auto w-full max-w-[1100px] px-4 sm:px-6 lg:px-8 py-8 lg:py-10">
         {children}
       </div>
     </div>

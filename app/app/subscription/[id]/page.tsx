@@ -5,10 +5,10 @@ import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Skeleton } from "@/components/ui/skeleton"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
 import PageShell from "@/components/PageShell"
-import HeaderBar from "@/components/HeaderBar"
+import AppHeader from "@/components/AppHeader"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
@@ -269,7 +269,7 @@ export default function SubscriptionDetailsPage() {
   if (loading) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription" onSignOut={signOut} currentPage="detail" />
+        <AppHeader title="Subscription" onSignOut={signOut} currentPage="detail" />
         <div className="space-y-6">
           <Card className="rounded-2xl shadow-sm border bg-card">
             <CardHeader>
@@ -303,7 +303,7 @@ export default function SubscriptionDetailsPage() {
   if (!subscription) {
     return (
       <PageShell>
-        <HeaderBar title="Subscription" onSignOut={signOut} currentPage="detail" />
+        <AppHeader title="Subscription" onSignOut={signOut} currentPage="detail" />
         <Card className="rounded-2xl shadow-sm border bg-card">
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">Subscription not found.</p>
@@ -331,7 +331,7 @@ export default function SubscriptionDetailsPage() {
 
   return (
     <PageShell>
-      <HeaderBar title={subscription.service} onSignOut={signOut} currentPage="detail" />
+      <AppHeader title={subscription.service} onSignOut={signOut} currentPage="detail" />
       
       <div className="space-y-6">
         <Button
@@ -402,11 +402,10 @@ export default function SubscriptionDetailsPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="renewal-date">Next renewal</Label>
-                <Input
+                <DatePicker
                   id="renewal-date"
-                  type="date"
                   value={renewalDate}
-                  onChange={(e) => setRenewalDate(e.target.value)}
+                  onChange={(next) => setRenewalDate(next ?? "")}
                   disabled={savingHelper}
                 />
               </div>
