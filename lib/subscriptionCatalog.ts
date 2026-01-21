@@ -7,16 +7,31 @@ export interface Plan {
 }
 
 export interface SubscriptionService {
+  /** Stable id for UI selection. */
+  id: string
   serviceName: string
-  country: string
-  currency: string
-  plans: Plan[]
-  cancelUrl: string
+  /** Display category to prefill the form. */
+  category: string
+  /** Defaults used by the add-subscription UX. */
+  defaultPeriod: Period
+  defaultPriceCents?: number
+  defaultPlans?: string[]
+
+  /** Optional legacy fields used elsewhere in the app. */
+  country?: string
+  currency?: string
+  plans?: Plan[]
+  cancelUrl?: string
 }
 
 export const subscriptionCatalog: SubscriptionService[] = [
   {
+    id: "netflix",
     serviceName: "Netflix",
+    category: "Streaming",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1549,
+    defaultPlans: ["Standard with Ads", "Standard", "Premium"],
     country: "US",
     currency: "USD",
     plans: [
@@ -27,7 +42,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://help.netflix.com/en/node/407",
   },
   {
+    id: "spotify",
     serviceName: "Spotify",
+    category: "Music",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1099,
+    defaultPlans: ["Individual", "Duo", "Family"],
     country: "US",
     currency: "USD",
     plans: [
@@ -39,7 +59,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.spotify.com/us/account/subscription/",
   },
   {
+    id: "youtube-premium",
     serviceName: "YouTube Premium",
+    category: "Streaming",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1399,
+    defaultPlans: ["Individual", "Family"],
     country: "US",
     currency: "USD",
     plans: [
@@ -49,7 +74,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.youtube.com/paid_memberships",
   },
   {
+    id: "icloud-plus",
     serviceName: "Apple iCloud",
+    category: "Cloud",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 99,
+    defaultPlans: ["50GB", "200GB", "2TB", "6TB", "12TB"],
     country: "US",
     currency: "USD",
     plans: [
@@ -62,7 +92,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://support.apple.com/en-us/HT201238",
   },
   {
+    id: "google-one",
     serviceName: "Google One",
+    category: "Cloud",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 199,
+    defaultPlans: ["Basic (100GB)", "Standard (200GB)", "Premium (2TB)"],
     country: "US",
     currency: "USD",
     plans: [
@@ -73,7 +108,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://one.google.com/storage",
   },
   {
+    id: "amazon-prime",
     serviceName: "Amazon Prime",
+    category: "Streaming",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1499,
+    defaultPlans: ["Monthly", "Annual"],
     country: "US",
     currency: "USD",
     plans: [
@@ -83,7 +123,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.amazon.com/gp/help/customer/display.html?nodeId=GXH8F8BZJZQXZQJZ",
   },
   {
+    id: "disney-plus",
     serviceName: "Disney+",
+    category: "Streaming",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 799,
+    defaultPlans: ["With Ads", "No Ads", "No Ads Annual"],
     country: "US",
     currency: "USD",
     plans: [
@@ -94,7 +139,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://help.disneyplus.com/article/cancel-subscription",
   },
   {
+    id: "hulu",
     serviceName: "Hulu",
+    category: "Streaming",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 799,
+    defaultPlans: ["With Ads", "No Ads"],
     country: "US",
     currency: "USD",
     plans: [
@@ -104,7 +154,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://help.hulu.com/s/article/cancel-subscription",
   },
   {
+    id: "max",
     serviceName: "HBO Max/Max",
+    category: "Streaming",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 999,
+    defaultPlans: ["With Ads", "Ad-Free", "Ultimate Ad-Free"],
     country: "US",
     currency: "USD",
     plans: [
@@ -115,7 +170,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://help.max.com/contact-us",
   },
   {
+    id: "playstation-plus",
     serviceName: "PlayStation Plus",
+    category: "Games",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 999,
+    defaultPlans: ["Essential", "Extra", "Premium"],
     country: "US",
     currency: "USD",
     plans: [
@@ -127,7 +187,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.playstation.com/en-us/support/subscriptions/manage-cancel/",
   },
   {
+    id: "xbox-game-pass",
     serviceName: "Xbox Game Pass",
+    category: "Games",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 999,
+    defaultPlans: ["PC Game Pass", "Ultimate"],
     country: "US",
     currency: "USD",
     plans: [
@@ -137,7 +202,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://account.microsoft.com/services/",
   },
   {
+    id: "dropbox",
     serviceName: "Dropbox",
+    category: "Cloud",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 999,
+    defaultPlans: ["Plus", "Professional"],
     country: "US",
     currency: "USD",
     plans: [
@@ -148,7 +218,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.dropbox.com/account/plan",
   },
   {
+    id: "notion",
     serviceName: "Notion",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 800,
+    defaultPlans: ["Free", "Plus", "Business"],
     country: "US",
     currency: "USD",
     plans: [
@@ -159,7 +234,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.notion.so/help/billing",
   },
   {
+    id: "grammarly",
     serviceName: "Grammarly",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1200,
+    defaultPlans: ["Premium", "Business"],
     country: "US",
     currency: "USD",
     plans: [
@@ -170,7 +250,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.grammarly.com/settings/subscription",
   },
   {
+    id: "chatgpt-plus",
     serviceName: "ChatGPT Plus",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 2000,
+    defaultPlans: ["Plus"],
     country: "US",
     currency: "USD",
     plans: [
@@ -179,7 +264,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://chat.openai.com/account/billing",
   },
   {
+    id: "canva",
     serviceName: "Canva",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1299,
+    defaultPlans: ["Pro", "Teams"],
     country: "US",
     currency: "USD",
     plans: [
@@ -189,7 +279,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.canva.com/help/article/cancel-subscription",
   },
   {
+    id: "figma",
     serviceName: "Figma",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 1200,
+    defaultPlans: ["Professional", "Organization"],
     country: "US",
     currency: "USD",
     plans: [
@@ -200,7 +295,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://help.figma.com/hc/en-us/articles/360041003114",
   },
   {
+    id: "adobe-cc",
     serviceName: "Adobe CC",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 5999,
+    defaultPlans: ["All Apps", "Photoshop"],
     country: "US",
     currency: "USD",
     plans: [
@@ -211,7 +311,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://www.adobe.com/account/cancel.html",
   },
   {
+    id: "microsoft-365",
     serviceName: "Microsoft 365",
+    category: "Productivity",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 699,
+    defaultPlans: ["Personal", "Family"],
     country: "US",
     currency: "USD",
     plans: [
@@ -223,7 +328,12 @@ export const subscriptionCatalog: SubscriptionService[] = [
     cancelUrl: "https://account.microsoft.com/services/",
   },
   {
+    id: "tinder",
     serviceName: "Tinder",
+    category: "Lifestyle",
+    defaultPeriod: "monthly",
+    defaultPriceCents: 799,
+    defaultPlans: ["Plus", "Gold", "Platinum"],
     country: "US",
     currency: "USD",
     plans: [
@@ -233,5 +343,90 @@ export const subscriptionCatalog: SubscriptionService[] = [
     ],
     cancelUrl: "https://www.help.tinder.com/hc/en-us/articles/360029546932",
   },
+  // --- Additional popular services (60+ total) ---
+  { id: "apple-music", serviceName: "Apple Music", category: "Music", defaultPeriod: "monthly", defaultPriceCents: 1099, defaultPlans: ["Individual", "Family", "Student"] },
+  { id: "amazon-music-unlimited", serviceName: "Amazon Music Unlimited", category: "Music", defaultPeriod: "monthly", defaultPriceCents: 1099, defaultPlans: ["Individual", "Family"] },
+  { id: "tidal", serviceName: "TIDAL", category: "Music", defaultPeriod: "monthly", defaultPriceCents: 1099, defaultPlans: ["Individual", "Family"] },
+  { id: "deezer", serviceName: "Deezer", category: "Music", defaultPeriod: "monthly", defaultPriceCents: 1199, defaultPlans: ["Premium", "Family"] },
+  { id: "soundcloud-go", serviceName: "SoundCloud Go+", category: "Music", defaultPeriod: "monthly", defaultPriceCents: 999, defaultPlans: ["Go+", "DJ"] },
+  { id: "audible", serviceName: "Audible", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 1495, defaultPlans: ["Plus", "Premium Plus"] },
+  { id: "apple-tv-plus", serviceName: "Apple TV+", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 999, defaultPlans: ["Standard"] },
+  { id: "paramount-plus", serviceName: "Paramount+", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 799, defaultPlans: ["Essential", "With Showtime"] },
+  { id: "peacock", serviceName: "Peacock", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 799, defaultPlans: ["Premium", "Premium Plus"] },
+  { id: "crunchyroll", serviceName: "Crunchyroll", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 799, defaultPlans: ["Fan", "Mega Fan", "Ultimate Fan"] },
+  { id: "patreon", serviceName: "Patreon", category: "News", defaultPeriod: "monthly", defaultPlans: ["Creator membership"] },
+  { id: "linkedin-premium", serviceName: "LinkedIn Premium", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 3999, defaultPlans: ["Career", "Business", "Sales Navigator"] },
+  { id: "google-workspace", serviceName: "Google Workspace", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 600, defaultPlans: ["Business Starter", "Business Standard", "Business Plus"] },
+  { id: "slack", serviceName: "Slack", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 875, defaultPlans: ["Pro", "Business+"] },
+  { id: "zoom", serviceName: "Zoom", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1499, defaultPlans: ["Pro", "Business"] },
+  { id: "evernote", serviceName: "Evernote", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1499, defaultPlans: ["Personal", "Professional"] },
+  { id: "todoist", serviceName: "Todoist", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 500, defaultPlans: ["Pro", "Business"] },
+  { id: "onepassword", serviceName: "1Password", category: "Security", defaultPeriod: "monthly", defaultPriceCents: 399, defaultPlans: ["Individual", "Family"] },
+  { id: "dashlane", serviceName: "Dashlane", category: "Security", defaultPeriod: "monthly", defaultPriceCents: 499, defaultPlans: ["Premium", "Friends & Family"] },
+  { id: "bitwarden", serviceName: "Bitwarden Premium", category: "Security", defaultPeriod: "yearly", defaultPriceCents: 1000, defaultPlans: ["Premium"] },
+  { id: "nordvpn", serviceName: "NordVPN", category: "VPN", defaultPeriod: "monthly", defaultPriceCents: 1299, defaultPlans: ["Standard", "Plus", "Complete"] },
+  { id: "expressvpn", serviceName: "ExpressVPN", category: "VPN", defaultPeriod: "monthly", defaultPriceCents: 1295, defaultPlans: ["Standard"] },
+  { id: "surfshark", serviceName: "Surfshark", category: "VPN", defaultPeriod: "monthly", defaultPriceCents: 1295, defaultPlans: ["Starter", "One", "One+"] },
+  { id: "protonvpn", serviceName: "Proton VPN", category: "VPN", defaultPeriod: "monthly", defaultPriceCents: 999, defaultPlans: ["Plus", "Unlimited"] },
+  { id: "mullvad", serviceName: "Mullvad VPN", category: "VPN", defaultPeriod: "monthly", defaultPriceCents: 500, defaultPlans: ["Standard"] },
+  { id: "malwarebytes", serviceName: "Malwarebytes", category: "Security", defaultPeriod: "monthly", defaultPriceCents: 399, defaultPlans: ["Standard", "Premium"] },
+  { id: "github-copilot", serviceName: "GitHub Copilot", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1000, defaultPlans: ["Individual", "Business"] },
+  { id: "jetbrains", serviceName: "JetBrains All Products Pack", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 2899, defaultPlans: ["Individual"] },
+  { id: "icloud-family", serviceName: "Apple One", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 1995, defaultPlans: ["Individual", "Family", "Premier"] },
+  { id: "hbo-now", serviceName: "HBO", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 1599, defaultPlans: ["Standard"] },
+  { id: "prime-video", serviceName: "Prime Video", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 899, defaultPlans: ["Standard"] },
+  { id: "nintendo-switch-online", serviceName: "Nintendo Switch Online", category: "Games", defaultPeriod: "yearly", defaultPriceCents: 1999, defaultPlans: ["Individual", "Family"] },
+  { id: "ea-play", serviceName: "EA Play", category: "Games", defaultPeriod: "monthly", defaultPriceCents: 599, defaultPlans: ["EA Play", "EA Play Pro"] },
+  { id: "ubisoft-plus", serviceName: "Ubisoft+", category: "Games", defaultPeriod: "monthly", defaultPriceCents: 1799, defaultPlans: ["Ubisoft+"] },
+  { id: "apple-arcade", serviceName: "Apple Arcade", category: "Games", defaultPeriod: "monthly", defaultPriceCents: 699, defaultPlans: ["Standard"] },
+  { id: "fitbit-premium", serviceName: "Fitbit Premium", category: "Fitness", defaultPeriod: "monthly", defaultPriceCents: 999, defaultPlans: ["Premium"] },
+  { id: "strava", serviceName: "Strava", category: "Fitness", defaultPeriod: "monthly", defaultPriceCents: 1199, defaultPlans: ["Subscription"] },
+  { id: "peloton", serviceName: "Peloton", category: "Fitness", defaultPeriod: "monthly", defaultPriceCents: 1299, defaultPlans: ["App One", "App+"] },
+  { id: "apple-fitness-plus", serviceName: "Apple Fitness+", category: "Fitness", defaultPeriod: "monthly", defaultPriceCents: 999, defaultPlans: ["Standard"] },
+  { id: "myfitnesspal", serviceName: "MyFitnessPal Premium", category: "Fitness", defaultPeriod: "monthly", defaultPriceCents: 1999, defaultPlans: ["Premium"] },
+  { id: "nyt", serviceName: "The New York Times", category: "News", defaultPeriod: "monthly", defaultPriceCents: 1700, defaultPlans: ["News", "All Access"] },
+  { id: "wsj", serviceName: "The Wall Street Journal", category: "News", defaultPeriod: "monthly", defaultPriceCents: 1999, defaultPlans: ["Digital"] },
+  { id: "washpost", serviceName: "The Washington Post", category: "News", defaultPeriod: "monthly", defaultPriceCents: 1200, defaultPlans: ["Digital"] },
+  { id: "economist", serviceName: "The Economist", category: "News", defaultPeriod: "monthly", defaultPriceCents: 1899, defaultPlans: ["Digital"] },
+  { id: "financial-times", serviceName: "Financial Times", category: "News", defaultPeriod: "monthly", defaultPriceCents: 3900, defaultPlans: ["Digital"] },
+  { id: "the-athletic", serviceName: "The Athletic", category: "News", defaultPeriod: "monthly", defaultPriceCents: 799, defaultPlans: ["Subscription"] },
+  { id: "medium", serviceName: "Medium", category: "News", defaultPeriod: "monthly", defaultPriceCents: 500, defaultPlans: ["Member"] },
+  { id: "substack", serviceName: "Substack", category: "News", defaultPeriod: "monthly", defaultPlans: ["Subscription"] },
+  { id: "icloud-mail", serviceName: "Fastmail", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 500, defaultPlans: ["Basic", "Standard", "Professional"] },
+  { id: "onedrive", serviceName: "OneDrive", category: "Cloud", defaultPeriod: "monthly", defaultPriceCents: 199, defaultPlans: ["100GB", "Microsoft 365 Personal"] },
+  { id: "backblaze", serviceName: "Backblaze", category: "Cloud", defaultPeriod: "monthly", defaultPriceCents: 900, defaultPlans: ["Computer Backup", "B2 Cloud Storage"] },
+  { id: "mega", serviceName: "MEGA", category: "Cloud", defaultPeriod: "monthly", defaultPriceCents: 1199, defaultPlans: ["Pro Lite", "Pro I", "Pro II"] },
+  { id: "pcloud", serviceName: "pCloud", category: "Cloud", defaultPeriod: "monthly", defaultPriceCents: 499, defaultPlans: ["Premium", "Premium Plus"] },
+  { id: "hbo-max-addons", serviceName: "CuriosityStream", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 499, defaultPlans: ["Standard"] },
+  { id: "plex-pass", serviceName: "Plex Pass", category: "Streaming", defaultPeriod: "monthly", defaultPriceCents: 499, defaultPlans: ["Monthly", "Yearly", "Lifetime"] },
+  { id: "procreate-dreams", serviceName: "Procreate", category: "Productivity", defaultPeriod: "yearly", defaultPlans: ["One-time"] },
+  { id: "cloudflare-zero-trust", serviceName: "Cloudflare", category: "Cloud", defaultPeriod: "monthly", defaultPlans: ["Zero Trust"] },
+  { id: "dropbox-sign", serviceName: "DocuSign", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1200, defaultPlans: ["Personal", "Standard", "Business Pro"] },
+  { id: "canada-pressreader", serviceName: "PressReader", category: "News", defaultPeriod: "monthly", defaultPriceCents: 2999, defaultPlans: ["Premium"] },
+  { id: "duolingo", serviceName: "Duolingo", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1299, defaultPlans: ["Super"] },
+  { id: "headspace", serviceName: "Headspace", category: "Fitness", defaultPeriod: "monthly", defaultPriceCents: 1299, defaultPlans: ["Premium"] },
+  { id: "calm", serviceName: "Calm", category: "Fitness", defaultPeriod: "yearly", defaultPriceCents: 6999, defaultPlans: ["Premium"] },
+  { id: "coursera-plus", serviceName: "Coursera Plus", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 5900, defaultPlans: ["Plus"] },
+  { id: "skillshare", serviceName: "Skillshare", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1399, defaultPlans: ["Standard"] },
+  { id: "loom", serviceName: "Loom", category: "Productivity", defaultPeriod: "monthly", defaultPriceCents: 1200, defaultPlans: ["Business", "Enterprise"] },
 ]
+
+export type ServiceCatalogItem = {
+  id: string
+  name: string
+  category: string
+  defaultPeriod: Period
+  defaultPriceCents?: number
+  defaultPlans?: string[]
+}
+
+// Canonical shape for the add-subscription UX (kept small + UI-friendly).
+export const serviceCatalog: ServiceCatalogItem[] = subscriptionCatalog.map((s) => ({
+  id: s.id,
+  name: s.serviceName,
+  category: s.category,
+  defaultPeriod: s.defaultPeriod,
+  defaultPriceCents: s.defaultPriceCents,
+  defaultPlans: s.defaultPlans,
+}))
 

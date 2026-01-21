@@ -39,6 +39,28 @@ export default function AppPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState("")
   const [formOpen, setFormOpen] = useState(false)
+  const [recentlyAddedId, setRecentlyAddedId] = useState<string | null>(null)
+
+  const scrollToSubscription = useCallback((id: string) => {
+    if (typeof document === "undefined") return
+    let tries = 0
+    const run = () => {
+      tries += 1
+      const el = document.querySelector(`[data-subscription-id="${CSS.escape(id)}"]`) as HTMLElement | null
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" })
+        return
+      }
+      if (tries < 6) setTimeout(run, 120)
+    }
+    setTimeout(run, 60)
+  }, [])
+
+  useEffect(() => {
+    if (!recentlyAddedId) return
+    const t = window.setTimeout(() => setRecentlyAddedId(null), 1500)
+    return () => window.clearTimeout(t)
+  }, [recentlyAddedId])
 
   useEffect(() => {
     if (consumeSignedInToast()) {
@@ -82,6 +104,17 @@ export default function AppPage() {
       if (!opts?.silent) setLoading(false)
     }
   }, [toast])
+
+  const handleCreatedSubscription = useCallback((created?: Subscription) => {
+    if (created) {
+      setSubscriptions((prev) => [created, ...prev])
+      setRecentlyAddedId(created.id)
+      scrollToSubscription(created.id)
+    }
+    // Reconcile in background (e.g. triggers, RLS, defaults) without blocking UI.
+    loadSubscriptions({ silent: true })
+    setFormOpen(false)
+  }, [loadSubscriptions, scrollToSubscription])
 
   useEffect(() => {
     if (!user) return
@@ -249,14 +282,7 @@ export default function AppPage() {
               </div>
             </GlassSurface>
             <AddSubscriptionForm
-              onSuccess={(created) => {
-                if (created) {
-                  setSubscriptions((prev) => [created, ...prev])
-                }
-                // Reconcile in background (e.g. triggers, RLS, defaults) without blocking UI.
-                loadSubscriptions({ silent: true })
-                setFormOpen(false)
-              }}
+              onSuccess={handleCreatedSubscription}
               defaultOpen={formOpen}
             />
           </>
@@ -266,6 +292,8 @@ export default function AppPage() {
               onSuccess={(created) => {
                 if (created) {
                   setSubscriptions((prev) => [created, ...prev])
+                  setRecentlyAddedId(created.id)
+                  scrollToSubscription(created.id)
                 }
                 loadSubscriptions({ silent: true })
               }}
@@ -329,6 +357,7 @@ export default function AppPage() {
                   cancelled={sub.cancelled}
                   renewal_date={sub.renewal_date}
                   reminder_days={sub.reminder_days}
+                  highlighted={sub.id === recentlyAddedId}
                 />
               ))}
             </div>

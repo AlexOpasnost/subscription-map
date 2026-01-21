@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useMemo, useState, useEffect } from "react"
 import {
   Accordion,
   AccordionContent,
@@ -11,6 +11,16 @@ import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
 import {
   Select,
   SelectContent,
@@ -23,7 +33,8 @@ import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
-import { Plus } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
 interface AddSubscriptionFormProps {
   onSuccess: (created?: {
@@ -47,13 +58,13 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     serviceName: "",
-    selectedPlanIndex: null as number | null,
+    plan: "",
     price: "",
     period: "monthly" as Period,
     category: "",
   })
-  const [serviceSearch, setServiceSearch] = useState("")
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false)
+  const [servicePickerOpen, setServicePickerOpen] = useState(false)
+  const [serviceQuery, setServiceQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string>("")
   const [touched, setTouched] = useState<{ service: boolean; price: boolean }>({
@@ -64,18 +75,20 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     service?: string
     price?: string
   }>({})
-  const serviceDropdownRef = useRef<HTMLDivElement>(null)
-  const serviceInputRef = useRef<HTMLInputElement>(null)
 
-  const filteredServices = subscriptionCatalog.filter((service) =>
-    service.serviceName.toLowerCase().includes(serviceSearch.toLowerCase())
-  )
+  const selectedService = useMemo(() => {
+    const key = formData.serviceName.trim().toLowerCase()
+    if (!key) return undefined
+    return subscriptionCatalog.find((s) => s.serviceName.trim().toLowerCase() === key)
+  }, [formData.serviceName])
 
-  const selectedService = subscriptionCatalog.find(
-    (service) => service.serviceName === formData.serviceName
-  )
-
-  const availablePlans = selectedService?.plans || []
+  const planOptions = useMemo(() => {
+    if (!selectedService) return []
+    const fromDefaults = selectedService.defaultPlans ?? []
+    const fromLegacyPlans = (selectedService.plans ?? []).map((p) => p.name)
+    const merged = [...fromDefaults, ...fromLegacyPlans].map((s) => s.trim()).filter(Boolean)
+    return Array.from(new Set(merged))
+  }, [selectedService])
   const priceNumber = parseFloat(formData.price)
   const isValidPrice = !!formData.price.trim() && !isNaN(priceNumber) && priceNumber > 0
   const canSubmit = !!formData.serviceName.trim() && isValidPrice && !loading
@@ -89,47 +102,35 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
         ? "Please enter a valid price"
         : undefined)
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        serviceDropdownRef.current &&
-        !serviceDropdownRef.current.contains(event.target as Node) &&
-        serviceInputRef.current &&
-        !serviceInputRef.current.contains(event.target as Node)
-      ) {
-        setShowServiceDropdown(false)
+  const applyServiceSelection = (nextServiceName: string) => {
+    const name = nextServiceName.trim()
+    const match = subscriptionCatalog.find((s) => s.serviceName.trim().toLowerCase() === name.toLowerCase())
+
+    setFormData((prev) => {
+      const nextCategory = match?.category ? match.category : prev.category
+      const nextPeriod = match?.defaultPeriod ?? prev.period
+      const nextPrice =
+        typeof match?.defaultPriceCents === "number"
+          ? (match.defaultPriceCents / 100).toFixed(2)
+          : prev.price
+      const nextPlan =
+        match && match.defaultPlans?.length === 1 ? (match.defaultPlans?.[0] ?? "") : ""
+
+      return {
+        ...prev,
+        serviceName: name,
+        plan: nextPlan,
+        category: nextCategory,
+        period: nextPeriod,
+        price: nextPrice,
       }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
-
-  const handleServiceSelect = (serviceName: string) => {
-    setFormData({
-      ...formData,
-      serviceName,
-      selectedPlanIndex: null,
-      price: "",
-      period: "monthly",
     })
-    setServiceSearch(serviceName)
-    setShowServiceDropdown(false)
-    setErrors({ ...errors, service: undefined })
-    setSubmitError("")
-  }
 
-  const handlePlanSelect = (planIndexStr: string) => {
-    const planIndex = parseInt(planIndexStr, 10)
-    const plan = availablePlans[planIndex]
-    if (plan !== undefined) {
-      setFormData({
-        ...formData,
-        selectedPlanIndex: planIndex,
-        price: plan.price.toString(),
-        period: plan.period,
-      })
-    }
+    setServiceQuery("")
+    setServicePickerOpen(false)
+    setTouched((t) => ({ ...t, service: true }))
+    setErrors((e) => ({ ...e, service: undefined }))
+    setSubmitError("")
   }
 
   const validateForm = (): boolean => {
@@ -179,10 +180,6 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       ? formData.period 
       : "monthly"
 
-    const selectedPlan = formData.selectedPlanIndex !== null && availablePlans.length > 0
-      ? availablePlans[formData.selectedPlanIndex]
-      : null
-
     // Sanitize category: trim, limit length, remove invalid characters
     const sanitizedCategory = formData.category
       .trim()
@@ -197,12 +194,12 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
           .insert({
             user_id: user.id,
             service: formData.serviceName.trim(),
-            plan: selectedPlan ? selectedPlan.name.trim() : null,
+            plan: formData.plan.trim() ? formData.plan.trim() : null,
             price_cents: priceCents,
             period: period,
             category: safeCategory,
             cancelled: false,
-            cancel_url: selectedService?.cancelUrl ?? null,
+            cancel_url: selectedService?.cancelUrl?.trim() ? selectedService.cancelUrl.trim() : null,
           })
           .select("id,service,plan,price_cents,period,category,cancelled,renewal_date,reminder_days,created_at")
           .single()
@@ -217,16 +214,16 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       // Reset form
       setFormData({
         serviceName: "",
-        selectedPlanIndex: null,
+        plan: "",
         price: "",
         period: "monthly",
         category: "",
       })
-      setServiceSearch("")
+      setServiceQuery("")
       setErrors({})
       setTouched({ service: false, price: false })
       setIsOpen(false)
-      toast({ title: "Subscription added", variant: "success" })
+      toast({ title: "Subscription added", description: created?.service ?? formData.serviceName.trim(), variant: "success" })
       onSuccess(created || undefined)
     } catch (error: unknown) {
       const msg = humanizeError(error)
@@ -247,12 +244,12 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       // Reset form when accordion closes
       setFormData({
         serviceName: "",
-        selectedPlanIndex: null,
+        plan: "",
         price: "",
         period: "monthly",
         category: "",
       })
-      setServiceSearch("")
+      setServiceQuery("")
       setErrors({})
       setSubmitError("")
       setTouched({ service: false, price: false })
@@ -285,71 +282,151 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   <Label htmlFor="service">
                     Service <span className="text-muted-foreground">*</span>
                   </Label>
-                  <div className="relative">
-                    <Input
-                      ref={serviceInputRef}
-                      id="service"
-                      type="text"
-                      placeholder="Search for a service..."
-                      value={serviceSearch}
-                      onChange={(e) => {
-                        const next = e.target.value
-                        setServiceSearch(next)
-                        // Treat free-typed input as the service name (fixes “feels broken” when users don't click a dropdown item).
-                        setFormData({ ...formData, serviceName: next, selectedPlanIndex: null })
-                        setShowServiceDropdown(true)
-                        setErrors({ ...errors, service: undefined })
-                        setSubmitError("")
-                      }}
-                      onFocus={() => setShowServiceDropdown(true)}
-                      onBlur={() => setTouched((prev) => ({ ...prev, service: true }))}
-                      className={serviceError ? "border-destructive" : ""}
-                      disabled={loading}
-                    />
-                    {showServiceDropdown && filteredServices.length > 0 && (
-                      <div
-                        ref={serviceDropdownRef}
-                        className="absolute z-50 w-full mt-2 bg-popover border border-white/10 rounded-2xl shadow-[0_18px_60px_rgba(0,0,0,0.65)] max-h-60 overflow-auto backdrop-blur-xl"
+                  <Popover open={servicePickerOpen} onOpenChange={(open) => setServicePickerOpen(open)}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        id="service"
+                        type="button"
+                        variant="outline"
+                        disabled={loading}
+                        className={cn(
+                          "w-full justify-between h-11 rounded-xl bg-white/5 border-white/10 text-foreground/90",
+                          "hover:bg-white/6",
+                          "active:scale-[0.99] transition-transform motion-reduce:transition-none motion-reduce:active:scale-100",
+                          serviceError ? "border-destructive" : ""
+                        )}
+                        aria-label="Select a service"
                       >
-                        {filteredServices.map((service) => (
-                          <button
-                            key={service.serviceName}
-                            type="button"
-                            className="w-full text-left px-3 py-2 hover:bg-accent text-sm"
-                            onClick={() => handleServiceSelect(service.serviceName)}
-                            disabled={loading}
-                          >
-                            {service.serviceName}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                        <span className={cn("truncate text-left", formData.serviceName.trim() ? "" : "text-muted-foreground")}>
+                          {formData.serviceName.trim() ? formData.serviceName.trim() : "Search services…"}
+                        </span>
+                        <ChevronsUpDown className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent
+                      align="start"
+                      className="w-[--radix-popover-trigger-width] p-0 bg-[rgba(19,20,23,0.92)] border border-white/10 rounded-2xl shadow-[0_22px_80px_rgba(0,0,0,0.65)] backdrop-blur-xl"
+                    >
+                      <Command shouldFilter={false}>
+                        <CommandInput
+                          placeholder="Search (or type a custom service)…"
+                          value={serviceQuery}
+                          onValueChange={setServiceQuery}
+                          disabled={loading}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter") return
+                            const q = serviceQuery.trim()
+                            if (!q) return
+                            e.preventDefault()
+                            const exact = subscriptionCatalog.find(
+                              (s) => s.serviceName.trim().toLowerCase() === q.toLowerCase()
+                            )
+                            applyServiceSelection(exact ? exact.serviceName : q)
+                          }}
+                        />
+                        <CommandList>
+                          {(() => {
+                            const q = serviceQuery.trim().toLowerCase()
+                            const filtered = q
+                              ? subscriptionCatalog.filter((s) => s.serviceName.toLowerCase().includes(q))
+                              : subscriptionCatalog
+                            const byCategory = new Map<string, typeof filtered>()
+                            for (const svc of filtered) {
+                              const cat = (svc.category || "Other").trim() || "Other"
+                              const list = byCategory.get(cat) ?? []
+                              list.push(svc)
+                              byCategory.set(cat, list)
+                            }
+
+                            const exactMatch = q
+                              ? subscriptionCatalog.some((s) => s.serviceName.trim().toLowerCase() === q)
+                              : false
+
+                            return (
+                              <>
+                                <CommandEmpty>
+                                  {q ? "No matches." : "Start typing to search."}
+                                </CommandEmpty>
+
+                                {q && !exactMatch ? (
+                                  <>
+                                    <CommandGroup heading="Custom">
+                                      <CommandItem
+                                        value={`__create__:${q}`}
+                                        onSelect={() => applyServiceSelection(serviceQuery)}
+                                      >
+                                        <span className="truncate">
+                                          Create <span className="text-foreground/90 font-medium">“{serviceQuery.trim()}”</span>
+                                        </span>
+                                      </CommandItem>
+                                    </CommandGroup>
+                                    <CommandSeparator />
+                                  </>
+                                ) : null}
+
+                                {Array.from(byCategory.entries())
+                                  .sort(([a], [b]) => a.localeCompare(b))
+                                  .map(([category, services]) => (
+                                    <CommandGroup key={category} heading={category}>
+                                      {services
+                                        .slice()
+                                        .sort((a, b) => a.serviceName.localeCompare(b.serviceName))
+                                        .slice(0, 50)
+                                        .map((svc) => {
+                                          const isSelected =
+                                            formData.serviceName.trim().toLowerCase() === svc.serviceName.trim().toLowerCase()
+                                          return (
+                                            <CommandItem
+                                              key={svc.id}
+                                              value={svc.serviceName}
+                                              onSelect={() => applyServiceSelection(svc.serviceName)}
+                                            >
+                                              <Check
+                                                className={cn(
+                                                  "mr-2 h-4 w-4",
+                                                  isSelected ? "opacity-100 text-foreground/90" : "opacity-0"
+                                                )}
+                                                aria-hidden="true"
+                                              />
+                                              <span className="truncate">{svc.serviceName}</span>
+                                            </CommandItem>
+                                          )
+                                        })}
+                                    </CommandGroup>
+                                  ))}
+                              </>
+                            )
+                          })()}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   {serviceError && (
                     <p className="text-sm text-destructive">{serviceError}</p>
                   )}
                 </div>
 
-                {selectedService && availablePlans.length > 0 && (
+                {selectedService && planOptions.length > 0 ? (
                   <div className="space-y-2 sm:col-span-2">
                     <Label htmlFor="plan">Plan</Label>
-                    <Select 
-                      value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
-                      onValueChange={handlePlanSelect}
+                    <Select
+                      value={formData.plan}
+                      onValueChange={(value) => setFormData((prev) => ({ ...prev, plan: value }))}
+                      disabled={loading}
                     >
                       <SelectTrigger id="plan" disabled={loading}>
                         <SelectValue placeholder="Select a plan (optional)" />
                       </SelectTrigger>
                       <SelectContent>
-                        {availablePlans.map((plan, idx) => (
-                          <SelectItem key={`plan-${idx}`} value={idx.toString()}>
-                            {plan.name} - ${plan.price.toFixed(2)}/{plan.period === "monthly" ? "mo" : "yr"}
+                        {planOptions.map((plan) => (
+                          <SelectItem key={plan} value={plan}>
+                            {plan}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                )}
+                ) : null}
 
                 <div className="space-y-2">
                   <Label htmlFor="price">
@@ -425,7 +502,10 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                     type="submit"
                     variant="primary"
                     disabled={!canSubmit}
-                    className="w-full sm:w-auto"
+                    className={cn(
+                      "w-full sm:w-auto",
+                      "active:scale-[0.98] transition-transform motion-reduce:transition-none motion-reduce:active:scale-100"
+                    )}
                     loading={loading}
                     loadingText="Adding…"
                   >

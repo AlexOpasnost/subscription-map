@@ -18,6 +18,7 @@ interface SubscriptionCardProps {
   cancelled: boolean
   renewal_date?: string | null
   reminder_days?: number | null
+  highlighted?: boolean
 }
 
 export default function SubscriptionCard({
@@ -30,6 +31,7 @@ export default function SubscriptionCard({
   cancelled,
   renewal_date,
   reminder_days,
+  highlighted = false,
 }: SubscriptionCardProps) {
   const router = useRouter()
   const price = price_cents / 100
@@ -51,9 +53,13 @@ export default function SubscriptionCard({
   return (
     <GlassSurface
       variant="subtle"
+      data-subscription-id={id}
       className={cn(
-        "bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] transition-[transform,box-shadow] duration-200",
-        cancelled ? "opacity-70" : "hover:-translate-y-px hover:shadow-[0_26px_90px_rgba(0,0,0,0.55)]"
+        "scroll-mt-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] transition-[transform,box-shadow] duration-200",
+        // Temporary highlight overlay (fades out smoothly)
+        "after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:opacity-0 after:transition-opacity after:duration-500 after:bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]",
+        cancelled ? "opacity-70" : "hover:-translate-y-px hover:shadow-[0_26px_90px_rgba(0,0,0,0.55)]",
+        highlighted ? "after:opacity-100 shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_26px_90px_rgba(0,0,0,0.55)]" : ""
       )}
     >
       <div className="p-4 sm:p-5">
