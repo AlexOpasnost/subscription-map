@@ -31,7 +31,7 @@ export default function BrandLink({ className }: BrandLinkProps) {
       aria-current={isCurrent ? "page" : undefined}
       className={cn(
         // Layout (pill)
-        "inline-flex items-center gap-2 rounded-full px-2.5 py-1.5",
+        "inline-flex items-center gap-2 rounded-full whitespace-nowrap px-2 py-1 sm:px-2.5 sm:py-1.5",
         // Visual style (Revolut-like dark)
         "text-foreground/85 hover:text-foreground/90",
         "hover:bg-white/5 hover:brightness-105",
@@ -51,10 +51,10 @@ export default function BrandLink({ className }: BrandLinkProps) {
         width={32}
         height={32}
         priority
-        className="size-8 rounded-lg"
+        className="size-8 shrink-0 rounded-lg"
         aria-hidden="true"
       />
-      <span className="text-sm font-semibold tracking-tight text-foreground/80">Subscription Map</span>
+      <span className="hidden sm:inline text-sm font-semibold tracking-tight text-foreground/80">Subscription Map</span>
     </Link>
   )
 }
