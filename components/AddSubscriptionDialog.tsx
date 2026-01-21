@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useMemo, useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,16 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command"
 import {
   Select,
   SelectContent,
@@ -23,6 +33,8 @@ import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError } from "@/lib/humanizeError"
+import { cn } from "@/lib/utils"
+import { Check, ChevronsUpDown } from "lucide-react"
 
 interface AddSubscriptionDialogProps {
   open: boolean
@@ -38,86 +50,57 @@ export default function AddSubscriptionDialog({
   const { toast } = useToast()
   const [formData, setFormData] = useState({
     serviceName: "",
-    selectedPlanIndex: null as number | null,
+    plan: "",
     price: "",
     period: "monthly" as Period,
     category: "",
   })
-  const [serviceSearch, setServiceSearch] = useState("")
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false)
+  const [servicePickerOpen, setServicePickerOpen] = useState(false)
+  const [serviceQuery, setServiceQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{
     service?: string
     price?: string
   }>({})
-  const serviceDropdownRef = useRef<HTMLDivElement>(null)
-  const serviceInputRef = useRef<HTMLInputElement>(null)
-
-  const filteredServices = subscriptionCatalog.filter((service) =>
-    service.serviceName.toLowerCase().includes(serviceSearch.toLowerCase())
-  )
-
-  const selectedService = subscriptionCatalog.find(
-    (service) => service.serviceName === formData.serviceName
-  )
-
-  const availablePlans = selectedService?.plans || []
 
   useEffect(() => {
     if (!open) {
       // Reset form when dialog closes
       setFormData({
         serviceName: "",
-        selectedPlanIndex: null,
+        plan: "",
         price: "",
         period: "monthly",
         category: "",
       })
-      setServiceSearch("")
+      setServiceQuery("")
       setErrors({})
     }
   }, [open])
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        serviceDropdownRef.current &&
-        !serviceDropdownRef.current.contains(event.target as Node) &&
-        serviceInputRef.current &&
-        !serviceInputRef.current.contains(event.target as Node)
-      ) {
-        setShowServiceDropdown(false)
-      }
-    }
+  const selectedService = useMemo(() => {
+    const key = formData.serviceName.trim().toLowerCase()
+    if (!key) return undefined
+    return subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === key)
+  }, [formData.serviceName])
 
-    document.addEventListener("mousedown", handleClickOutside)
-    return () => document.removeEventListener("mousedown", handleClickOutside)
-  }, [])
+  const applyServiceSelection = (nextServiceName: string) => {
+    const name = nextServiceName.trim()
+    const match = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === name.toLowerCase())
 
-  const handleServiceSelect = (serviceName: string) => {
-    setFormData({
-      ...formData,
-      serviceName,
-      selectedPlanIndex: null,
-      price: "",
-      period: "monthly",
-    })
-    setServiceSearch(serviceName)
-    setShowServiceDropdown(false)
-    setErrors({ ...errors, service: undefined })
-  }
-
-  const handlePlanSelect = (planIndexStr: string) => {
-    const planIndex = parseInt(planIndexStr, 10)
-    const plan = availablePlans[planIndex]
-    if (plan !== undefined) {
-      setFormData({
-        ...formData,
-        selectedPlanIndex: planIndex,
-        price: plan.price.toString(),
-        period: plan.period,
-      })
-    }
+    setFormData((prev) => ({
+      ...prev,
+      serviceName: name,
+      category: match?.category ?? prev.category,
+      period: match?.defaultPeriod ?? prev.period,
+      price:
+        match?.defaultPriceCents && match.defaultPriceCents > 0
+          ? (match.defaultPriceCents / 100).toFixed(2)
+          : prev.price,
+    }))
+    setServicePickerOpen(false)
+    setServiceQuery("")
+    setErrors((e) => ({ ...e, service: undefined }))
   }
 
   const validateForm = (): boolean => {
@@ -167,10 +150,6 @@ export default function AddSubscriptionDialog({
       const period = formData.period === "monthly" || formData.period === "yearly" 
         ? formData.period 
         : "monthly"
-
-      const selectedPlan = formData.selectedPlanIndex !== null && availablePlans.length > 0
-        ? availablePlans[formData.selectedPlanIndex]
-        : null
       const safeCategory = (formData.category ?? "").trim() || "Other"
 
       const { error } = await supabase
@@ -178,12 +157,12 @@ export default function AddSubscriptionDialog({
         .insert({
           user_id: authUser.id,
           service: formData.serviceName.trim(),
-          plan: selectedPlan ? selectedPlan.name.trim() : null,
+          plan: formData.plan.trim() ? formData.plan.trim() : null,
           price_cents: priceCents,
           period: period,
           category: safeCategory,
           cancelled: false,
-          cancel_url: selectedService?.cancelUrl ?? null,
+          cancel_url: selectedService?.cancelUrl?.trim() ? selectedService.cancelUrl.trim() : null,
         })
 
       if (error) {
@@ -226,70 +205,124 @@ export default function AddSubscriptionDialog({
               <Label htmlFor="service">
                 Service <span className="text-destructive">*</span>
               </Label>
-              <div className="relative">
-                <Input
-                  ref={serviceInputRef}
-                  id="service"
-                  type="text"
-                  placeholder="Search for a service..."
-                  value={serviceSearch}
-                  onChange={(e) => {
-                    setServiceSearch(e.target.value)
-                    setShowServiceDropdown(true)
-                    if (!e.target.value) {
-                      setFormData({ ...formData, serviceName: "", selectedPlanIndex: null, price: "", period: "monthly" })
-                    }
-                    setErrors({ ...errors, service: undefined })
-                  }}
-                  onFocus={() => setShowServiceDropdown(true)}
-                  className={errors.service ? "border-destructive" : ""}
-                  disabled={loading}
-                />
-                {showServiceDropdown && filteredServices.length > 0 && (
-                  <div
-                    ref={serviceDropdownRef}
-                    className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-lg max-h-60 overflow-auto"
+              <Popover open={servicePickerOpen} onOpenChange={setServicePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="service"
+                    type="button"
+                    variant="outline"
+                    disabled={loading}
+                    className={cn(
+                      "w-full justify-between h-11 rounded-xl bg-white/5 border-white/10 text-foreground/90",
+                      "hover:bg-white/6",
+                      errors.service ? "border-destructive" : ""
+                    )}
+                    aria-label="Select a service"
                   >
-                    {filteredServices.map((service) => (
-                      <button
-                        key={service.serviceName}
-                        type="button"
-                        className="w-full text-left px-3 py-2 hover:bg-accent hover:text-accent-foreground text-sm"
-                        onClick={() => handleServiceSelect(service.serviceName)}
-                        disabled={loading}
-                      >
-                        {service.serviceName}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                    <span className={cn("truncate text-left", formData.serviceName.trim() ? "" : "text-muted-foreground")}>
+                      {formData.serviceName.trim() ? formData.serviceName.trim() : "Search services…"}
+                    </span>
+                    <ChevronsUpDown className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  align="start"
+                  className="w-[--radix-popover-trigger-width] p-0 bg-[rgba(19,20,23,0.92)] border border-white/10 rounded-2xl shadow-[0_22px_80px_rgba(0,0,0,0.65)] backdrop-blur-xl"
+                >
+                  <Command shouldFilter={false}>
+                    <CommandInput
+                      placeholder="Search (or type a custom service)…"
+                      value={serviceQuery}
+                      onValueChange={setServiceQuery}
+                      disabled={loading}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter") return
+                        const q = serviceQuery.trim()
+                        if (!q) return
+                        e.preventDefault()
+                        const exact = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === q.toLowerCase())
+                        applyServiceSelection(exact ? exact.name : q)
+                      }}
+                    />
+                    <CommandList>
+                      {(() => {
+                        const q = serviceQuery.trim().toLowerCase()
+                        const filtered = q ? subscriptionCatalog.filter((s) => s.name.toLowerCase().includes(q)) : subscriptionCatalog
+                        const byCategory = new Map<string, typeof filtered>()
+                        for (const svc of filtered) {
+                          const cat = (svc.category || "Other").trim() || "Other"
+                          const list = byCategory.get(cat) ?? []
+                          list.push(svc)
+                          byCategory.set(cat, list)
+                        }
+
+                        const exactMatch = q ? subscriptionCatalog.some((s) => s.name.trim().toLowerCase() === q) : false
+
+                        return (
+                          <>
+                            <CommandEmpty>{q ? "No matches." : "Start typing to search."}</CommandEmpty>
+
+                            {q && !exactMatch ? (
+                              <>
+                                <CommandGroup heading="Custom">
+                                  <CommandItem value={`__create__:${q}`} onSelect={() => applyServiceSelection(serviceQuery)}>
+                                    <span className="truncate">
+                                      Create <span className="text-foreground/90 font-medium">“{serviceQuery.trim()}”</span>
+                                    </span>
+                                  </CommandItem>
+                                </CommandGroup>
+                                <CommandSeparator />
+                              </>
+                            ) : null}
+
+                            {Array.from(byCategory.entries())
+                              .sort(([a], [b]) => a.localeCompare(b))
+                              .map(([category, services]) => (
+                                <CommandGroup key={category} heading={category}>
+                                  {services
+                                    .slice()
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .slice(0, 50)
+                                    .map((svc) => {
+                                      const isSelected =
+                                        formData.serviceName.trim().toLowerCase() === svc.name.trim().toLowerCase()
+                                      return (
+                                        <CommandItem key={svc.name} value={svc.name} onSelect={() => applyServiceSelection(svc.name)}>
+                                          <Check
+                                            className={cn(
+                                              "mr-2 h-4 w-4",
+                                              isSelected ? "opacity-100 text-foreground/90" : "opacity-0"
+                                            )}
+                                            aria-hidden="true"
+                                          />
+                                          <span className="truncate">{svc.name}</span>
+                                        </CommandItem>
+                                      )
+                                    })}
+                                </CommandGroup>
+                              ))}
+                          </>
+                        )
+                      })()}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
               {errors.service && (
                 <p className="text-sm text-destructive">{errors.service}</p>
               )}
             </div>
-
-            {selectedService && availablePlans.length > 0 && (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan">Plan</Label>
-                <Select 
-                  value={formData.selectedPlanIndex !== null ? formData.selectedPlanIndex.toString() : ""} 
-                  onValueChange={handlePlanSelect}
-                  disabled={loading}
-                >
-                  <SelectTrigger id="plan" disabled={loading}>
-                    <SelectValue placeholder="Select a plan (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availablePlans.map((plan, idx) => (
-                      <SelectItem key={idx.toString()} value={idx.toString()}>
-                        {plan.name} - ${plan.price.toFixed(2)}/{plan.period === "monthly" ? "mo" : "yr"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="plan">Plan</Label>
+              <Input
+                id="plan"
+                type="text"
+                placeholder="Optional (e.g., Family, Pro, Premium)"
+                value={formData.plan}
+                onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
+                disabled={loading}
+              />
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="price">

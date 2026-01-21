@@ -181,7 +181,7 @@ export default function SubscriptionDetailsPage() {
     if (openingCancel) return
 
     const catalogService = subscriptionCatalog.find(
-      (service) => service.serviceName === subscription.service
+      (service) => service.name === subscription.service
     )
     const cancelUrl = subscription.cancel_url || catalogService?.cancelUrl
 
@@ -347,7 +347,7 @@ export default function SubscriptionDetailsPage() {
   const yearlyPrice = subscription.period === "yearly" ? price : price * 12
 
   const catalogService = subscriptionCatalog.find(
-    (service) => service.serviceName === subscription.service
+    (service) => service.name === subscription.service
   )
   const hasCancelUrl = !!(subscription.cancel_url || catalogService?.cancelUrl)
 

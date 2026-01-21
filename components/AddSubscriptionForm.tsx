@@ -79,16 +79,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   const selectedService = useMemo(() => {
     const key = formData.serviceName.trim().toLowerCase()
     if (!key) return undefined
-    return subscriptionCatalog.find((s) => s.serviceName.trim().toLowerCase() === key)
+    return subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === key)
   }, [formData.serviceName])
-
-  const planOptions = useMemo(() => {
-    if (!selectedService) return []
-    const fromDefaults = selectedService.defaultPlans ?? []
-    const fromLegacyPlans = (selectedService.plans ?? []).map((p) => p.name)
-    const merged = [...fromDefaults, ...fromLegacyPlans].map((s) => s.trim()).filter(Boolean)
-    return Array.from(new Set(merged))
-  }, [selectedService])
   const priceNumber = parseFloat(formData.price)
   const isValidPrice = !!formData.price.trim() && !isNaN(priceNumber) && priceNumber > 0
   const canSubmit = !!formData.serviceName.trim() && isValidPrice && !loading
@@ -104,22 +96,19 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
   const applyServiceSelection = (nextServiceName: string) => {
     const name = nextServiceName.trim()
-    const match = subscriptionCatalog.find((s) => s.serviceName.trim().toLowerCase() === name.toLowerCase())
+    const match = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === name.toLowerCase())
 
     setFormData((prev) => {
       const nextCategory = match?.category ? match.category : prev.category
       const nextPeriod = match?.defaultPeriod ?? prev.period
       const nextPrice =
-        typeof match?.defaultPriceCents === "number"
+        typeof match?.defaultPriceCents === "number" && match.defaultPriceCents > 0
           ? (match.defaultPriceCents / 100).toFixed(2)
           : prev.price
-      const nextPlan =
-        match && match.defaultPlans?.length === 1 ? (match.defaultPlans?.[0] ?? "") : ""
 
       return {
         ...prev,
         serviceName: name,
-        plan: nextPlan,
         category: nextCategory,
         period: nextPeriod,
         price: nextPrice,
@@ -223,7 +212,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       setErrors({})
       setTouched({ service: false, price: false })
       setIsOpen(false)
-      toast({ title: "Subscription added", description: created?.service ?? formData.serviceName.trim(), variant: "success" })
+      toast({ title: "Subscription added", variant: "success" })
       onSuccess(created || undefined)
     } catch (error: unknown) {
       const msg = humanizeError(error)
@@ -319,16 +308,16 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                             if (!q) return
                             e.preventDefault()
                             const exact = subscriptionCatalog.find(
-                              (s) => s.serviceName.trim().toLowerCase() === q.toLowerCase()
+                              (s) => s.name.trim().toLowerCase() === q.toLowerCase()
                             )
-                            applyServiceSelection(exact ? exact.serviceName : q)
+                            applyServiceSelection(exact ? exact.name : q)
                           }}
                         />
                         <CommandList>
                           {(() => {
                             const q = serviceQuery.trim().toLowerCase()
                             const filtered = q
-                              ? subscriptionCatalog.filter((s) => s.serviceName.toLowerCase().includes(q))
+                              ? subscriptionCatalog.filter((s) => s.name.toLowerCase().includes(q))
                               : subscriptionCatalog
                             const byCategory = new Map<string, typeof filtered>()
                             for (const svc of filtered) {
@@ -339,7 +328,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                             }
 
                             const exactMatch = q
-                              ? subscriptionCatalog.some((s) => s.serviceName.trim().toLowerCase() === q)
+                              ? subscriptionCatalog.some((s) => s.name.trim().toLowerCase() === q)
                               : false
 
                             return (
@@ -370,16 +359,16 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                                     <CommandGroup key={category} heading={category}>
                                       {services
                                         .slice()
-                                        .sort((a, b) => a.serviceName.localeCompare(b.serviceName))
+                                        .sort((a, b) => a.name.localeCompare(b.name))
                                         .slice(0, 50)
                                         .map((svc) => {
                                           const isSelected =
-                                            formData.serviceName.trim().toLowerCase() === svc.serviceName.trim().toLowerCase()
+                                            formData.serviceName.trim().toLowerCase() === svc.name.trim().toLowerCase()
                                           return (
                                             <CommandItem
-                                              key={svc.id}
-                                              value={svc.serviceName}
-                                              onSelect={() => applyServiceSelection(svc.serviceName)}
+                                              key={svc.name}
+                                              value={svc.name}
+                                              onSelect={() => applyServiceSelection(svc.name)}
                                             >
                                               <Check
                                                 className={cn(
@@ -388,7 +377,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                                                 )}
                                                 aria-hidden="true"
                                               />
-                                              <span className="truncate">{svc.serviceName}</span>
+                                              <span className="truncate">{svc.name}</span>
                                             </CommandItem>
                                           )
                                         })}
@@ -406,27 +395,17 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   )}
                 </div>
 
-                {selectedService && planOptions.length > 0 ? (
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="plan">Plan</Label>
-                    <Select
-                      value={formData.plan}
-                      onValueChange={(value) => setFormData((prev) => ({ ...prev, plan: value }))}
-                      disabled={loading}
-                    >
-                      <SelectTrigger id="plan" disabled={loading}>
-                        <SelectValue placeholder="Select a plan (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {planOptions.map((plan) => (
-                          <SelectItem key={plan} value={plan}>
-                            {plan}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="plan">Plan</Label>
+                  <Input
+                    id="plan"
+                    type="text"
+                    placeholder="Optional (e.g., Family, Pro, Premium)"
+                    value={formData.plan}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
+                    disabled={loading}
+                  />
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="price">
@@ -451,6 +430,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   {priceError && (
                     <p className="text-sm text-destructive">{priceError}</p>
                   )}
+                  <p className="text-xs text-muted-foreground">Price varies by region and plan — edit as needed.</p>
                 </div>
 
                 <div className="space-y-2">

@@ -53,6 +53,7 @@ export default function SubscriptionCard({
   return (
     <GlassSurface
       variant="subtle"
+      id={`subscription-${id}`}
       data-subscription-id={id}
       className={cn(
         "scroll-mt-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] transition-[transform,box-shadow] duration-200",
