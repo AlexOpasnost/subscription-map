@@ -1,11 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import Image from "next/image"
 import { List, LogOut, Map } from "lucide-react"
 
-import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import BrandLink from "@/components/BrandLink"
 
 type AppHeaderProps = {
   title: string
@@ -18,22 +17,7 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
     <div className="sticky top-4 z-40 mb-8">
       <div className="flex items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-[rgba(19,20,23,0.62)] backdrop-blur-xl px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.45)]">
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className={cn(
-              "h-9 w-9 shrink-0 rounded-xl border border-white/10 bg-transparent",
-              "flex items-center justify-center overflow-hidden"
-            )}
-            aria-hidden="true"
-          >
-            <Image
-              src="/logo.png"
-              alt="Subscription Map"
-              width={24}
-              height={24}
-              priority
-              className="rounded-sm"
-            />
-          </div>
+          <BrandLink className="shrink-0" />
           <div className="min-w-0">
             <h1 className="truncate text-base sm:text-lg font-medium tracking-tight">{title}</h1>
           </div>
