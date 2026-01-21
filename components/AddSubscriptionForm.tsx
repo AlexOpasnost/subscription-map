@@ -28,13 +28,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
+import { subscriptionCatalog, type Period, type PlanOption } from "@/lib/subscriptionCatalog"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown, Plus } from "lucide-react"
+
+const CUSTOM_PLAN_KEY = "__custom__"
+
+function formatPriceDollars(priceCents: number): string {
+  return (priceCents / 100).toFixed(2)
+}
+
+function planKey(p: PlanOption): string {
+  return `${p.name}__${p.period}`
+}
+
+function parsePlanKey(key: string): { name: string; period: Period } | null {
+  const m = /^(.+)__(monthly|yearly)$/.exec(key)
+  if (!m) return null
+  return { name: m[1], period: m[2] as Period }
+}
 
 interface AddSubscriptionFormProps {
   onSuccess: (created?: {
@@ -65,8 +81,15 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   })
   const [servicePickerOpen, setServicePickerOpen] = useState(false)
   const [serviceQuery, setServiceQuery] = useState("")
+  const [selectedPlanKey, setSelectedPlanKey] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [submitError, setSubmitError] = useState<string>("")
+  const [dirty, setDirty] = useState({
+    price: false,
+    period: false,
+    plan: false,
+    category: false,
+  })
   const [touched, setTouched] = useState<{ service: boolean; price: boolean }>({
     service: false,
     price: false,
@@ -97,29 +120,59 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   const applyServiceSelection = (nextServiceName: string) => {
     const name = nextServiceName.trim()
     const match = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === name.toLowerCase())
+    const plans = match?.plans ?? []
+    const preferred =
+      (match?.defaultPlanName
+        ? plans.find((p) => p.name === match.defaultPlanName) ?? plans.find((p) => p.name.toLowerCase() === match.defaultPlanName!.toLowerCase())
+        : undefined) ?? plans[0]
 
     setFormData((prev) => {
-      const nextCategory = match?.category ? match.category : prev.category
-      const nextPeriod = match?.defaultPeriod ?? prev.period
-      const nextPrice =
-        typeof match?.defaultPriceCents === "number" && match.defaultPriceCents > 0
-          ? (match.defaultPriceCents / 100).toFixed(2)
-          : prev.price
-
+      const nextCategory = match?.category ? match.category : ""
+      const nextPeriod = preferred?.period ?? "monthly"
+      const nextPrice = typeof preferred?.priceCents === "number" && preferred.priceCents > 0 ? formatPriceDollars(preferred.priceCents) : ""
       return {
         ...prev,
         serviceName: name,
+        plan: preferred?.name ?? "",
         category: nextCategory,
         period: nextPeriod,
         price: nextPrice,
       }
     })
 
+    setSelectedPlanKey(preferred ? planKey(preferred) : "")
     setServiceQuery("")
     setServicePickerOpen(false)
     setTouched((t) => ({ ...t, service: true }))
     setErrors((e) => ({ ...e, service: undefined }))
     setSubmitError("")
+    setDirty({ price: false, period: false, plan: false, category: false })
+  }
+
+  const handlePlanSelection = (key: string) => {
+    if (loading) return
+    if (!selectedService?.plans?.length) return
+
+    if (key === CUSTOM_PLAN_KEY) {
+      setSelectedPlanKey(CUSTOM_PLAN_KEY)
+      return
+    }
+
+    const parsed = parsePlanKey(key)
+    if (!parsed) return
+    const match = selectedService.plans.find((p) => planKey(p) === key)
+    if (!match) return
+
+    // User explicitly selected a plan → apply defaults and clear dirty flags for the auto-filled fields.
+    setFormData((prev) => ({
+      ...prev,
+      plan: match.name,
+      period: match.period,
+      price: match.priceCents > 0 ? formatPriceDollars(match.priceCents) : prev.price,
+      category: !dirty.category && selectedService.category ? selectedService.category : prev.category,
+    }))
+    setSelectedPlanKey(key)
+    setDirty((d) => ({ ...d, price: false, period: false, plan: false }))
   }
 
   const validateForm = (): boolean => {
@@ -209,6 +262,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
         category: "",
       })
       setServiceQuery("")
+      setSelectedPlanKey("")
+      setDirty({ price: false, period: false, plan: false, category: false })
       setErrors({})
       setTouched({ service: false, price: false })
       setIsOpen(false)
@@ -239,9 +294,11 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
         category: "",
       })
       setServiceQuery("")
+      setSelectedPlanKey("")
       setErrors({})
       setSubmitError("")
       setTouched({ service: false, price: false })
+      setDirty({ price: false, period: false, plan: false, category: false })
     }
   }
 
@@ -395,17 +452,54 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   )}
                 </div>
 
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="plan">Plan</Label>
-                  <Input
-                    id="plan"
-                    type="text"
-                    placeholder="Optional (e.g., Family, Pro, Premium)"
-                    value={formData.plan}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
-                    disabled={loading}
-                  />
-                </div>
+                {selectedService?.plans && selectedService.plans.length > 0 ? (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="plan">Plan</Label>
+                    <Select value={selectedPlanKey || (formData.plan.trim() ? CUSTOM_PLAN_KEY : "")} onValueChange={handlePlanSelection} disabled={loading}>
+                      <SelectTrigger id="plan" disabled={loading}>
+                        <SelectValue placeholder="Select a plan (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={CUSTOM_PLAN_KEY}>Custom plan…</SelectItem>
+                        {selectedService.plans.map((p) => (
+                          <SelectItem key={planKey(p)} value={planKey(p)}>
+                            {p.name} • ${(p.priceCents / 100).toFixed(2)}/{p.period === "monthly" ? "mo" : "yr"}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {selectedPlanKey === CUSTOM_PLAN_KEY ? (
+                      <Input
+                        id="plan-custom"
+                        type="text"
+                        placeholder="Enter plan name (optional)"
+                        value={formData.plan}
+                        onChange={(e) => {
+                          setFormData((prev) => ({ ...prev, plan: e.target.value }))
+                          setDirty((d) => ({ ...d, plan: true }))
+                        }}
+                        disabled={loading}
+                      />
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="plan">Plan</Label>
+                    <Input
+                      id="plan"
+                      type="text"
+                      placeholder="Optional (e.g., Family, Pro, Premium)"
+                      value={formData.plan}
+                      onChange={(e) => {
+                        setFormData((prev) => ({ ...prev, plan: e.target.value }))
+                        setSelectedPlanKey(CUSTOM_PLAN_KEY)
+                        setDirty((d) => ({ ...d, plan: true }))
+                      }}
+                      disabled={loading}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label htmlFor="price">
@@ -422,6 +516,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       setFormData({ ...formData, price: e.target.value })
                       setErrors({ ...errors, price: undefined })
                       setSubmitError("")
+                      setDirty((d) => ({ ...d, price: true }))
                     }}
                     onBlur={() => setTouched((prev) => ({ ...prev, price: true }))}
                     className={priceError ? "border-destructive" : ""}
@@ -437,9 +532,10 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   <Label htmlFor="period">Period</Label>
                   <Select
                     value={formData.period}
-                    onValueChange={(value: Period) =>
+                    onValueChange={(value: Period) => {
                       setFormData({ ...formData, period: value })
-                    }
+                      setDirty((d) => ({ ...d, period: true }))
+                    }}
                     disabled={loading}
                   >
                     <SelectTrigger id="period" disabled={loading}>
@@ -463,6 +559,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       // Limit input length and sanitize
                       const value = e.target.value.substring(0, 50).replace(/[<>]/g, "")
                       setFormData({ ...formData, category: value })
+                      setDirty((d) => ({ ...d, category: true }))
                     }}
                     maxLength={50}
                     disabled={loading}

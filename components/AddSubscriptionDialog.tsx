@@ -29,12 +29,28 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { subscriptionCatalog, type Period } from "@/lib/subscriptionCatalog"
+import { subscriptionCatalog, type Period, type PlanOption } from "@/lib/subscriptionCatalog"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError } from "@/lib/humanizeError"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown } from "lucide-react"
+
+const CUSTOM_PLAN_KEY = "__custom__"
+
+function formatPriceDollars(priceCents: number): string {
+  return (priceCents / 100).toFixed(2)
+}
+
+function planKey(p: PlanOption): string {
+  return `${p.name}__${p.period}`
+}
+
+function parsePlanKey(key: string): { name: string; period: Period } | null {
+  const m = /^(.+)__(monthly|yearly)$/.exec(key)
+  if (!m) return null
+  return { name: m[1], period: m[2] as Period }
+}
 
 interface AddSubscriptionDialogProps {
   open: boolean
@@ -57,6 +73,7 @@ export default function AddSubscriptionDialog({
   })
   const [servicePickerOpen, setServicePickerOpen] = useState(false)
   const [serviceQuery, setServiceQuery] = useState("")
+  const [selectedPlanKey, setSelectedPlanKey] = useState<string>("")
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{
     service?: string
@@ -74,6 +91,7 @@ export default function AddSubscriptionDialog({
         category: "",
       })
       setServiceQuery("")
+      setSelectedPlanKey("")
       setErrors({})
     }
   }, [open])
@@ -87,20 +105,48 @@ export default function AddSubscriptionDialog({
   const applyServiceSelection = (nextServiceName: string) => {
     const name = nextServiceName.trim()
     const match = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === name.toLowerCase())
+    const plans = match?.plans ?? []
+    const preferred =
+      (match?.defaultPlanName
+        ? plans.find((p) => p.name === match.defaultPlanName) ?? plans.find((p) => p.name.toLowerCase() === match.defaultPlanName!.toLowerCase())
+        : undefined) ?? plans[0]
 
     setFormData((prev) => ({
       ...prev,
       serviceName: name,
       category: match?.category ?? prev.category,
-      period: match?.defaultPeriod ?? prev.period,
-      price:
-        match?.defaultPriceCents && match.defaultPriceCents > 0
-          ? (match.defaultPriceCents / 100).toFixed(2)
-          : prev.price,
+      plan: preferred?.name ?? "",
+      period: preferred?.period ?? prev.period,
+      price: preferred?.priceCents ? formatPriceDollars(preferred.priceCents) : prev.price,
     }))
+    setSelectedPlanKey(preferred ? planKey(preferred) : "")
     setServicePickerOpen(false)
     setServiceQuery("")
     setErrors((e) => ({ ...e, service: undefined }))
+  }
+
+  const handlePlanSelection = (key: string) => {
+    if (loading) return
+    if (!selectedService?.plans?.length) return
+
+    if (key === CUSTOM_PLAN_KEY) {
+      setSelectedPlanKey(CUSTOM_PLAN_KEY)
+      return
+    }
+
+    const parsed = parsePlanKey(key)
+    if (!parsed) return
+    const match = selectedService.plans.find((p) => planKey(p) === key)
+    if (!match) return
+
+    setFormData((prev) => ({
+      ...prev,
+      plan: match.name,
+      period: match.period,
+      price: match.priceCents ? formatPriceDollars(match.priceCents) : prev.price,
+      category: selectedService.category ?? prev.category,
+    }))
+    setSelectedPlanKey(key)
   }
 
   const validateForm = (): boolean => {
@@ -312,17 +358,53 @@ export default function AddSubscriptionDialog({
                 <p className="text-sm text-destructive">{errors.service}</p>
               )}
             </div>
-            <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="plan">Plan</Label>
-              <Input
-                id="plan"
-                type="text"
-                placeholder="Optional (e.g., Family, Pro, Premium)"
-                value={formData.plan}
-                onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
-                disabled={loading}
-              />
-            </div>
+            {selectedService?.plans && selectedService.plans.length > 0 ? (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="plan">Plan</Label>
+                <Select
+                  value={selectedPlanKey || (formData.plan.trim() ? CUSTOM_PLAN_KEY : "")}
+                  onValueChange={handlePlanSelection}
+                  disabled={loading}
+                >
+                  <SelectTrigger id="plan" disabled={loading}>
+                    <SelectValue placeholder="Select a plan (optional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={CUSTOM_PLAN_KEY}>Custom plan…</SelectItem>
+                    {selectedService.plans.map((p) => (
+                      <SelectItem key={planKey(p)} value={planKey(p)}>
+                        {p.name} • ${(p.priceCents / 100).toFixed(2)}/{p.period === "monthly" ? "mo" : "yr"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedPlanKey === CUSTOM_PLAN_KEY ? (
+                  <Input
+                    id="plan-custom"
+                    type="text"
+                    placeholder="Enter plan name (optional)"
+                    value={formData.plan}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
+                    disabled={loading}
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="plan">Plan</Label>
+                <Input
+                  id="plan"
+                  type="text"
+                  placeholder="Optional (e.g., Family, Pro, Premium)"
+                  value={formData.plan}
+                  onChange={(e) => {
+                    setFormData((prev) => ({ ...prev, plan: e.target.value }))
+                    setSelectedPlanKey(CUSTOM_PLAN_KEY)
+                  }}
+                  disabled={loading}
+                />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="price">
