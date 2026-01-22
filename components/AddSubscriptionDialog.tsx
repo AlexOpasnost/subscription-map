@@ -29,27 +29,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { subscriptionCatalog, type Period, type PlanOption } from "@/lib/subscriptionCatalog"
+import { subscriptionCatalog, type Period, type Plan } from "@/lib/subscriptionCatalog"
 import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError } from "@/lib/humanizeError"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown } from "lucide-react"
 
-const CUSTOM_PLAN_KEY = "__custom__"
-
 function formatPriceDollars(priceCents: number): string {
   return (priceCents / 100).toFixed(2)
 }
 
-function planKey(p: PlanOption): string {
-  return `${p.name}__${p.period}`
+function planKey(p: Plan): string {
+  return `${p.name}__${p.period}__${p.priceCents}`
 }
 
-function parsePlanKey(key: string): { name: string; period: Period } | null {
-  const m = /^(.+)__(monthly|yearly)$/.exec(key)
-  if (!m) return null
-  return { name: m[1], period: m[2] as Period }
+function isCustomPlan(p: Plan | undefined): boolean {
+  if (!p) return true
+  return p.name.trim().toLowerCase() === "custom" || p.priceCents === 0
+}
+
+const FALLBACK_CUSTOM_PLAN: Plan = {
+  name: "Custom",
+  period: "monthly",
+  priceCents: 0,
+  currency: "USD",
+  note: "Set your own price",
 }
 
 interface AddSubscriptionDialogProps {
@@ -117,9 +122,9 @@ export default function AddSubscriptionDialog({
       category: match?.category ?? prev.category,
       plan: preferred?.name ?? "",
       period: preferred?.period ?? prev.period,
-      price: preferred?.priceCents ? formatPriceDollars(preferred.priceCents) : prev.price,
+      price: preferred && preferred.priceCents > 0 ? formatPriceDollars(preferred.priceCents) : "",
     }))
-    setSelectedPlanKey(preferred ? planKey(preferred) : "")
+    setSelectedPlanKey(preferred ? planKey(preferred) : planKey(FALLBACK_CUSTOM_PLAN))
     setServicePickerOpen(false)
     setServiceQuery("")
     setErrors((e) => ({ ...e, service: undefined }))
@@ -127,24 +132,16 @@ export default function AddSubscriptionDialog({
 
   const handlePlanSelection = (key: string) => {
     if (loading) return
-    if (!selectedService?.plans?.length) return
-
-    if (key === CUSTOM_PLAN_KEY) {
-      setSelectedPlanKey(CUSTOM_PLAN_KEY)
-      return
-    }
-
-    const parsed = parsePlanKey(key)
-    if (!parsed) return
-    const match = selectedService.plans.find((p) => planKey(p) === key)
+    const plans = selectedService?.plans ?? (formData.serviceName.trim() ? [FALLBACK_CUSTOM_PLAN] : [])
+    const match = plans.find((p) => planKey(p) === key)
     if (!match) return
 
     setFormData((prev) => ({
       ...prev,
       plan: match.name,
       period: match.period,
-      price: match.priceCents ? formatPriceDollars(match.priceCents) : prev.price,
-      category: selectedService.category ?? prev.category,
+      price: match.priceCents > 0 ? formatPriceDollars(match.priceCents) : "",
+      category: selectedService?.category ?? prev.category,
     }))
     setSelectedPlanKey(key)
   }
@@ -156,11 +153,17 @@ export default function AddSubscriptionDialog({
       newErrors.service = "Service is required"
     }
 
-    const price = parseFloat(formData.price)
-    if (!formData.price.trim()) {
-      newErrors.price = "Price is required"
-    } else if (isNaN(price) || price <= 0) {
-      newErrors.price = "Please enter a valid price"
+    const effectivePlans = selectedService?.plans ?? (formData.serviceName.trim() ? [FALLBACK_CUSTOM_PLAN] : [])
+    const selectedPlan = effectivePlans.find((p) => planKey(p) === selectedPlanKey) ?? effectivePlans[0]
+    const typed = parseFloat(formData.price)
+    const hasTyped = formData.price.trim().length > 0
+    const typedValid = hasTyped && !Number.isNaN(typed) && typed > 0
+
+    if (isCustomPlan(selectedPlan)) {
+      if (!typedValid) newErrors.price = "Enter your price"
+    } else {
+      if (!typedValid && !(selectedPlan && selectedPlan.priceCents > 0)) newErrors.price = "Price is required"
+      if (hasTyped && !typedValid) newErrors.price = "Please enter a valid price"
     }
 
     setErrors(newErrors)
@@ -191,8 +194,11 @@ export default function AddSubscriptionDialog({
         return
       }
 
-      const price = parseFloat(formData.price)
-      const priceCents = Math.round(price * 100)
+      const effectivePlans = selectedService?.plans ?? (formData.serviceName.trim() ? [FALLBACK_CUSTOM_PLAN] : [])
+      const selectedPlan = effectivePlans.find((p) => planKey(p) === selectedPlanKey) ?? effectivePlans[0]
+      const typed = parseFloat(formData.price)
+      const typedValid = formData.price.trim().length > 0 && !Number.isNaN(typed) && typed > 0
+      const priceCents = typedValid ? Math.round(typed * 100) : selectedPlan && selectedPlan.priceCents > 0 ? selectedPlan.priceCents : 0
       const period = formData.period === "monthly" || formData.period === "yearly" 
         ? formData.period 
         : "monthly"
@@ -358,53 +364,21 @@ export default function AddSubscriptionDialog({
                 <p className="text-sm text-destructive">{errors.service}</p>
               )}
             </div>
-            {selectedService?.plans && selectedService.plans.length > 0 ? (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan">Plan</Label>
-                <Select
-                  value={selectedPlanKey || (formData.plan.trim() ? CUSTOM_PLAN_KEY : "")}
-                  onValueChange={handlePlanSelection}
-                  disabled={loading}
-                >
-                  <SelectTrigger id="plan" disabled={loading}>
-                    <SelectValue placeholder="Select a plan (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={CUSTOM_PLAN_KEY}>Custom plan…</SelectItem>
-                    {selectedService.plans.map((p) => (
-                      <SelectItem key={planKey(p)} value={planKey(p)}>
-                        {p.name} • ${(p.priceCents / 100).toFixed(2)}/{p.period === "monthly" ? "mo" : "yr"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedPlanKey === CUSTOM_PLAN_KEY ? (
-                  <Input
-                    id="plan-custom"
-                    type="text"
-                    placeholder="Enter plan name (optional)"
-                    value={formData.plan}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, plan: e.target.value }))}
-                    disabled={loading}
-                  />
-                ) : null}
-              </div>
-            ) : (
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="plan">Plan</Label>
-                <Input
-                  id="plan"
-                  type="text"
-                  placeholder="Optional (e.g., Family, Pro, Premium)"
-                  value={formData.plan}
-                  onChange={(e) => {
-                    setFormData((prev) => ({ ...prev, plan: e.target.value }))
-                    setSelectedPlanKey(CUSTOM_PLAN_KEY)
-                  }}
-                  disabled={loading}
-                />
-              </div>
-            )}
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="plan">Plan</Label>
+              <Select value={selectedPlanKey} onValueChange={handlePlanSelection} disabled={loading || !formData.serviceName.trim()}>
+                <SelectTrigger id="plan" disabled={loading || !formData.serviceName.trim()}>
+                  <SelectValue placeholder={formData.serviceName.trim() ? "Select a plan" : "Select a service first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {(selectedService?.plans ?? [FALLBACK_CUSTOM_PLAN]).map((p) => (
+                    <SelectItem key={planKey(p)} value={planKey(p)}>
+                      {p.name} • {p.priceCents > 0 ? `$${(p.priceCents / 100).toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-2">
               <Label htmlFor="price">

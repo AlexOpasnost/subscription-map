@@ -49,6 +49,14 @@ function isCustomPlan(p: Plan | undefined): boolean {
   return p.name.trim().toLowerCase() === "custom" || p.priceCents === 0
 }
 
+const FALLBACK_CUSTOM_PLAN: Plan = {
+  name: "Custom",
+  period: "monthly",
+  priceCents: 0,
+  currency: "USD",
+  note: "Set your own price",
+}
+
 interface AddSubscriptionFormProps {
   onSuccess: (created?: {
     id: string
@@ -104,7 +112,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
   }, [formData.serviceName])
 
   const selectedPlan = useMemo(() => {
-    if (!selectedService) return undefined
+    // If the service isn't in our catalog (custom typed), fall back to a "Custom" plan.
+    if (!selectedService) return formData.serviceName.trim() ? FALLBACK_CUSTOM_PLAN : undefined
     const key = selectedPlanKey
     if (key) return selectedService.plans.find((p) => planKey(p) === key)
     const preferred =
@@ -112,7 +121,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
         ? selectedService.plans.find((p) => p.name.toLowerCase() === selectedService.defaultPlanName!.toLowerCase())
         : undefined) ?? selectedService.plans[0]
     return preferred
-  }, [selectedService, selectedPlanKey])
+  }, [formData.serviceName, selectedService, selectedPlanKey])
 
   const canSubmit = useMemo(() => {
     if (loading) return false
@@ -126,7 +135,22 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
   const serviceError =
     errors.service ?? (touched.service && !formData.serviceName.trim() ? "Service is required" : undefined)
-  const priceError = errors.price
+  const priceError = useMemo(() => {
+    if (errors.price) return errors.price
+    if (!touched.price) return undefined
+
+    const typed = parseFloat(formData.price)
+    const hasTyped = formData.price.trim().length > 0
+    const typedValid = hasTyped && !Number.isNaN(typed) && typed > 0
+
+    if (isCustomPlan(selectedPlan)) {
+      return typedValid ? undefined : "Enter your price"
+    }
+
+    // Non-custom plan: allow blank (we'll use plan defaults), but if user typed something invalid show feedback.
+    if (hasTyped && !typedValid) return "Please enter a valid price"
+    return selectedPlan && selectedPlan.priceCents > 0 ? undefined : "Price is required"
+  }, [errors.price, formData.price, selectedPlan, touched.price])
 
   const applyServiceSelection = (nextServiceName: string) => {
     const name = nextServiceName.trim()
@@ -152,7 +176,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       }
     })
 
-    setSelectedPlanKey(preferred ? planKey(preferred) : "")
+    setSelectedPlanKey(preferred ? planKey(preferred) : planKey(FALLBACK_CUSTOM_PLAN))
     setServiceQuery("")
     setServicePickerOpen(false)
     setTouched((t) => ({ ...t, service: true }))
@@ -163,8 +187,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
   const handlePlanSelection = (key: string) => {
     if (loading) return
-    if (!selectedService) return
-    const match = selectedService.plans.find((p) => planKey(p) === key)
+    const plans = selectedService?.plans ?? (formData.serviceName.trim() ? [FALLBACK_CUSTOM_PLAN] : [])
+    const match = plans.find((p) => planKey(p) === key)
     if (!match) return
 
     setFormData((prev) => ({
@@ -172,7 +196,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       plan: match.name,
       period: match.period,
       price: match.priceCents > 0 ? formatPriceDollars(match.priceCents) : "",
-      category: !dirty.category && selectedService.category ? selectedService.category : prev.category,
+      category: !dirty.category && selectedService?.category ? selectedService.category : prev.category,
     }))
     setSelectedPlanKey(key)
     setDirty((d) => ({ ...d, price: false, period: false, plan: false }))
@@ -479,13 +503,13 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   <Select
                     value={selectedPlanKey || (selectedPlan ? planKey(selectedPlan) : "")}
                     onValueChange={handlePlanSelection}
-                    disabled={loading || !selectedService}
+                    disabled={loading || !formData.serviceName.trim()}
                   >
-                    <SelectTrigger id="plan" disabled={loading || !selectedService}>
-                      <SelectValue placeholder={selectedService ? "Select a plan" : "Select a service first"} />
+                    <SelectTrigger id="plan" disabled={loading || !formData.serviceName.trim()}>
+                      <SelectValue placeholder={formData.serviceName.trim() ? "Select a plan" : "Select a service first"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {(selectedService?.plans ?? []).map((p) => (
+                      {(selectedService?.plans ?? [FALLBACK_CUSTOM_PLAN]).map((p) => (
                         <SelectItem key={planKey(p)} value={planKey(p)}>
                           {p.name} •{" "}
                           {p.priceCents > 0 ? `$${(p.priceCents / 100).toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
