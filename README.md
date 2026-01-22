@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Subscription Map
 
-## Getting Started
+Next.js App Router + Supabase app for tracking subscriptions, plus an Assistant Inbox and async integrations (Google Calendar + Notion).
 
-First, run the development server:
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Supabase migrations
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Run migrations from `supabase/migrations/` in order.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The integrations + async sync tables are added in:
+- `supabase/migrations/004_create_integrations_and_sync_tables.sql`
 
-## Learn More
+## Environment variables
 
-To learn more about Next.js, take a look at the following resources:
+### Required (client + server)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `APP_URL` (absolute origin, e.g. `https://your-domain`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Required (server only)
 
-## Deploy on Vercel
+- `SUPABASE_SERVICE_ROLE_KEY` (needed for OAuth callbacks and cron-based sync runner)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Integrations (OAuth)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `NOTION_CLIENT_ID`
+- `NOTION_CLIENT_SECRET`
+
+### Optional (recommended)
+
+- `SYNC_RUN_SECRET` (if set, `/api/sync/run` requires `Authorization: Bearer <SYNC_RUN_SECRET>`)
+
+## OAuth redirect URLs
+
+Configure the following redirect URIs in each provider dashboard (built from `APP_URL`):
+
+- **Google**: `${APP_URL}/api/integrations/google/callback`
+- **Notion**: `${APP_URL}/api/integrations/notion/callback`
+
+## Sync runner (Vercel Cron suggestion)
+
+Syncing is async: user actions enqueue rows into `sync_jobs`. A server route processes queued jobs in small batches (limit 10 per run):
+
+- `POST /api/sync/run` (or `GET /api/sync/run`)
+
+Suggested Vercel Cron schedule: every 5 minutes call `/api/sync/run` with:
+
+- `Authorization: Bearer ${SYNC_RUN_SECRET}` (recommended)
+

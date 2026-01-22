@@ -34,8 +34,9 @@ interface Position {
   monthlyCost: number
 }
 
-function getCategoryColor(_category: string): string {
+function getCategoryColor(category: string): string {
   // Calm, dark-first map: keep visual noise low and let circle size carry meaning.
+  void category
   return "fill-[rgba(255,255,255,0.18)]"
 }
 

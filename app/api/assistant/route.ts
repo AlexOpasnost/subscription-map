@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
+
 type Period = "monthly" | "yearly"
 
 type AssistantOkResponse = {
@@ -400,6 +402,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
+      await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
       await logEvent("ok")
       return NextResponse.json<AssistantResponse>({
         kind: "action",
@@ -428,6 +431,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
+      await enqueueSyncJobs(supabase, { userId, action: "push_task", payload: { record_id: created.id } })
       await logEvent("ok")
       return NextResponse.json<AssistantResponse>({
         kind: "action",
@@ -460,6 +464,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
+      await enqueueSyncJobs(supabase, { userId, action: "push_plan", payload: { record_id: created.id } })
       await logEvent("ok")
       return NextResponse.json<AssistantResponse>({
         kind: "action",
