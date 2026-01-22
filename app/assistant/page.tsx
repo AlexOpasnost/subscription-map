@@ -8,12 +8,13 @@ import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { useToast } from "@/components/ToastProvider"
+import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 
 type AssistantApiResponse =
-  | { kind: "action" | "query"; message: string; data?: unknown }
-  | { kind: "error"; message: string; details?: unknown }
+  | { kind: "action" | "query"; message: string; data?: unknown; preview?: unknown; sync?: { enqueued: number } }
+  | { kind: "error"; message: string; details?: unknown; preview?: unknown }
 
 type AssistantEventRow = {
   id: string
@@ -64,6 +65,12 @@ export default function AssistantPage() {
   const [lastResult, setLastResult] = useState<AssistantApiResponse | null>(null)
 
   const canSend = useMemo(() => text.trim().length > 0 && !sending, [text, sending])
+  const livePreview = useMemo(() => {
+    const s = text.trim()
+    if (!s) return null
+    const { parsed } = parseInput(s)
+    return getIntentPreview(parsed)
+  }, [text])
 
   const loadEvents = async () => {
     const { data, error } = await supabase
@@ -116,7 +123,9 @@ export default function AssistantPage() {
         return
       }
 
-      toast({ title: "Saved", description: json.message, variant: "success" })
+      const enqueued = typeof json.sync?.enqueued === "number" ? json.sync.enqueued : 0
+      const suffix = enqueued > 0 ? ` (Sync queued for ${enqueued})` : ""
+      toast({ title: "Saved", description: `${json.message}${suffix}`, variant: "success" })
       setText("")
       await loadEvents()
     } catch (err: unknown) {
@@ -206,6 +215,14 @@ export default function AssistantPage() {
             </div>
 
             <div className="mt-4 space-y-3">
+              {livePreview ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="text-xs text-muted-foreground">Preview</div>
+                  <div className="mt-1 text-sm font-medium text-foreground/90">{livePreview.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{livePreview.summary}</div>
+                </div>
+              ) : null}
+
               <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}

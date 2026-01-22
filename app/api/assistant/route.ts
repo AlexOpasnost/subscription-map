@@ -1,67 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+import type { AddPlanArgs, AddSubscriptionArgs, AddTaskArgs, Period } from "@/lib/assistant/parse"
+import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
-
-type Period = "monthly" | "yearly"
 
 type AssistantOkResponse = {
   kind: "action" | "query"
   message: string
   data?: unknown
+  parsed?: unknown
+  preview?: unknown
+  sync?: { enqueued: number }
 }
 
 type AssistantErrorResponse = {
   kind: "error"
   message: string
   details?: unknown
+  parsed?: unknown
+  preview?: unknown
 }
 
 type AssistantResponse = AssistantOkResponse | AssistantErrorResponse
-
-type AssistantEventParsed =
-  | { kind: "action"; action: "add_subscription"; args: unknown }
-  | { kind: "action"; action: "add_task"; args: unknown }
-  | { kind: "action"; action: "add_plan"; args: unknown }
-  | { kind: "query"; query: "spending"; args: unknown }
-  | { kind: "query"; query: "upcoming_renewals"; args: unknown }
-  | { kind: "unknown"; args: unknown }
-
-type AddSubscriptionArgs = {
-  service: string
-  priceCents: number
-  period: Period
-  plan?: string
-  category?: string
-  renewDate?: string // YYYY-MM-DD
-  remindDays?: number
-}
-
-type AddTaskArgs = {
-  title: string
-  dueAt?: string // ISO
-}
-
-type AddPlanArgs = {
-  title: string
-  startDate?: string // YYYY-MM-DD
-  endDate?: string // YYYY-MM-DD
-  budgetCents?: number
-}
 
 function getEnv(name: string): string {
   const v = process.env[name]
   if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
   return v
-}
-
-function parseCurrencyToCents(input: string): number | null {
-  const s = input.trim().replace(/^\$/, "")
-  if (!s) return null
-  const n = Number(s)
-  if (!Number.isFinite(n)) return null
-  if (n <= 0) return null
-  return Math.round(n * 100)
 }
 
 function toIsoDateOnly(input: string): string | null {
@@ -80,174 +46,6 @@ function parseMaybeIsoDateTime(input: string): string | null {
   const iso = new Date(s)
   if (!Number.isNaN(iso.getTime())) return iso.toISOString()
   return null
-}
-
-function sliceUntilKeyword(tokens: string[], startIdx: number, keywords: Set<string>): { value: string; nextIdx: number } {
-  const parts: string[] = []
-  let i = startIdx
-  while (i < tokens.length) {
-    const t = tokens[i]
-    if (keywords.has(t.toLowerCase())) break
-    parts.push(t)
-    i++
-  }
-  return { value: parts.join(" ").trim(), nextIdx: i }
-}
-
-function tokenize(input: string): string[] {
-  return input
-    .trim()
-    .split(/\s+/)
-    .map((t) => t.trim())
-    .filter(Boolean)
-}
-
-function parseInput(text: string): { parsed: AssistantEventParsed; error?: string } {
-  const raw = text.trim()
-  const lower = raw.toLowerCase()
-  if (!raw) return { parsed: { kind: "unknown", args: {} }, error: "Empty input." }
-
-  // Queries
-  if (lower.includes("what am i spending")) {
-    return { parsed: { kind: "query", query: "spending", args: {} } }
-  }
-  if (lower.includes("upcoming renewals")) {
-    return { parsed: { kind: "query", query: "upcoming_renewals", args: { windowDays: 30 } } }
-  }
-
-  // Actions
-  if (lower.startsWith("add subscription ")) {
-    const rest = raw.slice("add subscription ".length).trim()
-    const tokens = tokenize(rest)
-    const keywords = new Set(["plan", "category", "renew", "remind"])
-
-    const periodIdx = tokens.findIndex((t) => {
-      const v = t.toLowerCase()
-      return v === "monthly" || v === "yearly"
-    })
-    if (periodIdx < 0) {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing billing period (monthly|yearly)." }
-    }
-
-    const priceIdx = tokens.findIndex((t) => parseCurrencyToCents(t) !== null)
-    if (priceIdx < 0) {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing price (e.g. 12.99)." }
-    }
-    if (priceIdx >= periodIdx) {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Expected: add subscription <service> <price> <monthly|yearly> ..." }
-    }
-
-    const service = tokens.slice(0, priceIdx).join(" ").trim()
-    const priceCents = parseCurrencyToCents(tokens[priceIdx] ?? "")
-    const periodToken = (tokens[periodIdx] ?? "").toLowerCase() as Period
-    if (!service) return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing service name." }
-    if (!priceCents) return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Invalid price." }
-    if (periodToken !== "monthly" && periodToken !== "yearly") {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Invalid period (monthly|yearly)." }
-    }
-
-    const args: AddSubscriptionArgs = { service, priceCents, period: periodToken }
-
-    let i = periodIdx + 1
-    while (i < tokens.length) {
-      const key = tokens[i]?.toLowerCase()
-      if (!key) break
-      if (!keywords.has(key)) {
-        i++
-        continue
-      }
-      if (key === "plan") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        if (value) args.plan = value
-        i = nextIdx
-        continue
-      }
-      if (key === "category") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        if (value) args.category = value
-        i = nextIdx
-        continue
-      }
-      if (key === "renew") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        const d = toIsoDateOnly(value)
-        if (d) args.renewDate = d
-        i = nextIdx
-        continue
-      }
-      if (key === "remind") {
-        const n = Number(tokens[i + 1])
-        if (Number.isFinite(n) && n > 0) args.remindDays = Math.floor(n)
-        i = i + 2
-        continue
-      }
-      i++
-    }
-
-    return { parsed: { kind: "action", action: "add_subscription", args } }
-  }
-
-  if (lower.startsWith("add task ")) {
-    const rest = raw.slice("add task ".length).trim()
-    const tokens = tokenize(rest)
-    const dueIdx = tokens.findIndex((t) => t.toLowerCase() === "due")
-    const titleTokens = dueIdx >= 0 ? tokens.slice(0, dueIdx) : tokens
-    const title = titleTokens.join(" ").trim()
-    if (!title) return { parsed: { kind: "action", action: "add_task", args: {} }, error: "Missing task title." }
-    const args: AddTaskArgs = { title }
-    if (dueIdx >= 0) {
-      const dueText = tokens.slice(dueIdx + 1).join(" ").trim()
-      const iso = parseMaybeIsoDateTime(dueText)
-      if (iso) args.dueAt = iso
-    }
-    return { parsed: { kind: "action", action: "add_task", args } }
-  }
-
-  if (lower.startsWith("add plan ")) {
-    const rest = raw.slice("add plan ".length).trim()
-    const tokens = tokenize(rest)
-    const keywords = new Set(["from", "to", "budget"])
-
-    const firstKeywordIdx = tokens.findIndex((t) => keywords.has(t.toLowerCase()))
-    const title = (firstKeywordIdx >= 0 ? tokens.slice(0, firstKeywordIdx) : tokens).join(" ").trim()
-    if (!title) return { parsed: { kind: "action", action: "add_plan", args: {} }, error: "Missing plan title." }
-    const args: AddPlanArgs = { title }
-
-    let i = firstKeywordIdx >= 0 ? firstKeywordIdx : tokens.length
-    while (i < tokens.length) {
-      const key = tokens[i]?.toLowerCase()
-      if (!key || !keywords.has(key)) {
-        i++
-        continue
-      }
-      if (key === "from") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        const d = toIsoDateOnly(value)
-        if (d) args.startDate = d
-        i = nextIdx
-        continue
-      }
-      if (key === "to") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        const d = toIsoDateOnly(value)
-        if (d) args.endDate = d
-        i = nextIdx
-        continue
-      }
-      if (key === "budget") {
-        const amount = tokens[i + 1] ?? ""
-        const cents = parseCurrencyToCents(amount)
-        if (cents !== null) args.budgetCents = cents
-        i = i + 2
-        continue
-      }
-      i++
-    }
-
-    return { parsed: { kind: "action", action: "add_plan", args } }
-  }
-
-  return { parsed: { kind: "unknown", args: { text: raw } }, error: "Unsupported command. Try: add subscription…, add task…, add plan…, what am i spending, upcoming renewals." }
 }
 
 function getBearerToken(req: NextRequest): string | null {
@@ -291,6 +89,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { parsed, error: parseError } = parseInput(text)
+  const preview = getIntentPreview(parsed)
 
   async function logEvent(status: "ok" | "error", error?: string) {
     await supabase.from("assistant_events").insert({
@@ -304,7 +103,10 @@ export async function POST(req: NextRequest) {
 
   if (parseError) {
     await logEvent("error", parseError)
-    return NextResponse.json<AssistantResponse>({ kind: "error", message: parseError, details: parsed }, { status: 400 })
+    return NextResponse.json<AssistantResponse>(
+      { kind: "error", message: parseError, details: parsed, parsed, preview },
+      { status: 400 }
+    )
   }
 
   try {
@@ -331,6 +133,8 @@ export async function POST(req: NextRequest) {
         kind: "query",
         message: "Here’s what you’re spending.",
         data: { monthly_total: monthlyTotal, yearly_total: yearlyTotal },
+        parsed,
+        preview,
       })
     }
 
@@ -356,6 +160,8 @@ export async function POST(req: NextRequest) {
         kind: "query",
         message: "Upcoming renewals in the next 30 days.",
         data: { items: subs ?? [] },
+        parsed,
+        preview,
       })
     }
 
@@ -402,12 +208,15 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
-      await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
+      const sync = await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
       await logEvent("ok")
       return NextResponse.json<AssistantResponse>({
         kind: "action",
         message: `Added subscription: ${created?.service ?? args.service}`,
         data: created ?? null,
+        parsed,
+        preview,
+        sync,
       })
     }
 
@@ -431,12 +240,15 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
-      await enqueueSyncJobs(supabase, { userId, action: "push_task", payload: { record_id: created.id } })
+      const sync = await enqueueSyncJobs(supabase, { userId, action: "push_task", payload: { record_id: created.id } })
       await logEvent("ok")
       return NextResponse.json<AssistantResponse>({
         kind: "action",
         message: `Added task: ${created?.title ?? args.title}`,
         data: created ?? null,
+        parsed,
+        preview,
+        sync,
       })
     }
 
@@ -464,24 +276,27 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
-      await enqueueSyncJobs(supabase, { userId, action: "push_plan", payload: { record_id: created.id } })
+      const sync = await enqueueSyncJobs(supabase, { userId, action: "push_plan", payload: { record_id: created.id } })
       await logEvent("ok")
       return NextResponse.json<AssistantResponse>({
         kind: "action",
         message: `Added plan: ${created?.title ?? args.title}`,
         data: created ?? null,
+        parsed,
+        preview,
+        sync,
       })
     }
 
     await logEvent("error", "Unsupported command.")
     return NextResponse.json<AssistantResponse>(
-      { kind: "error", message: "Unsupported command.", details: parsed },
+      { kind: "error", message: "Unsupported command.", details: parsed, parsed, preview },
       { status: 400 }
     )
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unexpected error"
     await logEvent("error", message)
-    return NextResponse.json<AssistantResponse>({ kind: "error", message }, { status: 500 })
+    return NextResponse.json<AssistantResponse>({ kind: "error", message, parsed, preview }, { status: 500 })
   }
 }
 
