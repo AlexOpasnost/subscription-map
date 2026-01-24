@@ -21,8 +21,11 @@ export const metadata: Metadata = {
   title: "Subscription Map",
   description: "Track monthly spending, spot forgotten subscriptions, and stay in control of your money.",
   icons: {
-    icon: "/logo.png",
-    apple: "/logo.png",
+    icon: [
+      { url: "/logo.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: [{ url: "/logo.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {
     type: "website",

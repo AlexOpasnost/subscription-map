@@ -25,6 +25,14 @@ type AssistantEventRow = {
   created_at: string
 }
 
+type AssistantActivityRow = {
+  id: string
+  kind: string
+  command: string
+  result: unknown
+  created_at: string
+}
+
 type SpendingResult = { monthly_total: number; yearly_total: number }
 type UpcomingRenewalItem = {
   id: string
@@ -62,6 +70,7 @@ export default function AssistantPage() {
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
   const [events, setEvents] = useState<AssistantEventRow[]>([])
+  const [activity, setActivity] = useState<AssistantActivityRow[] | null>(null)
   const [lastResult, setLastResult] = useState<AssistantApiResponse | null>(null)
 
   const canSend = useMemo(() => text.trim().length > 0 && !sending, [text, sending])
@@ -73,6 +82,18 @@ export default function AssistantPage() {
   }, [text])
 
   const loadEvents = async () => {
+    // Prefer the newer assistant_activity log (if present); fall back to assistant_events.
+    const activityRes = await supabase
+      .from("assistant_activity")
+      .select("id,kind,command,result,created_at")
+      .order("created_at", { ascending: false })
+      .limit(20)
+
+    if (!activityRes.error) {
+      setActivity((activityRes.data ?? []) as AssistantActivityRow[])
+      return
+    }
+
     const { data, error } = await supabase
       .from("assistant_events")
       .select("id,input_text,parsed,status,error,created_at")
@@ -83,6 +104,7 @@ export default function AssistantPage() {
       if (process.env.NODE_ENV !== "production") console.error(error)
       return
     }
+    setActivity(null)
     setEvents((data ?? []) as AssistantEventRow[])
   }
 
@@ -112,7 +134,7 @@ export default function AssistantPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ command: text, userId: user.id }),
       })
 
       const json = (await res.json()) as AssistantApiResponse
@@ -259,7 +281,32 @@ export default function AssistantPage() {
             </div>
 
             <div className="mt-4 space-y-3">
-              {events.length === 0 ? (
+              {activity ? (
+                activity.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No activity yet.</div>
+                ) : (
+                  activity.map((ev) => {
+                    const result = isRecord(ev.result) ? ev.result : {}
+                    const message = typeof result.message === "string" ? result.message : ""
+                    return (
+                      <div key={ev.id} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-foreground/90 truncate">{ev.command}</div>
+                            <div className="mt-0.5 text-xs text-muted-foreground">
+                              {new Date(ev.created_at).toLocaleString()}
+                            </div>
+                            {message ? (
+                              <div className="mt-2 text-sm text-muted-foreground">{message}</div>
+                            ) : null}
+                          </div>
+                          <div className="text-xs text-muted-foreground shrink-0">{ev.kind}</div>
+                        </div>
+                      </div>
+                    )
+                  })
+                )
+              ) : events.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No activity yet.</div>
               ) : (
                 events.map((ev) => (

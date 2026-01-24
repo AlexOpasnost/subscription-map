@@ -64,16 +64,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json<AssistantResponse>({ kind: "error", message: "Unauthorized" }, { status: 401 })
   }
 
-  let body: { text?: unknown }
+  let body: { text?: unknown; command?: unknown; userId?: unknown }
   try {
-    body = (await req.json()) as { text?: unknown }
+    body = (await req.json()) as { text?: unknown; command?: unknown; userId?: unknown }
   } catch {
     return NextResponse.json<AssistantResponse>({ kind: "error", message: "Invalid JSON body" }, { status: 400 })
   }
 
-  const text = typeof body.text === "string" ? body.text : ""
+  const text =
+    typeof body.command === "string"
+      ? body.command
+      : typeof body.text === "string"
+        ? body.text
+        : ""
   if (!text.trim()) {
-    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Missing `text`" }, { status: 400 })
+    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Missing `command`" }, { status: 400 })
   }
 
   // Supabase client bound to the user's JWT for RLS.
@@ -85,6 +90,11 @@ export async function POST(req: NextRequest) {
   const { data: userData, error: userError } = await supabase.auth.getUser(token)
   const userId = userData?.user?.id ?? null
   if (userError || !userId) {
+    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Unauthorized" }, { status: 401 })
+  }
+
+  const claimedUserId = typeof body.userId === "string" ? body.userId.trim() : ""
+  if (claimedUserId && claimedUserId !== userId) {
     return NextResponse.json<AssistantResponse>({ kind: "error", message: "Unauthorized" }, { status: 401 })
   }
 
@@ -101,8 +111,22 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  async function logActivity(kind: "action" | "query" | "error", result: Record<string, unknown>) {
+    try {
+      await supabase.from("assistant_activity").insert({
+        user_id: userId,
+        kind,
+        command: text,
+        result,
+      })
+    } catch {
+      // best-effort; never block the assistant
+    }
+  }
+
   if (parseError) {
     await logEvent("error", parseError)
+    await logActivity("error", { message: parseError, parsed, preview })
     return NextResponse.json<AssistantResponse>(
       { kind: "error", message: parseError, details: parsed, parsed, preview },
       { status: 400 }
@@ -129,6 +153,7 @@ export async function POST(req: NextRequest) {
       }, 0)
 
       await logEvent("ok")
+      await logActivity("query", { message: "spending", data: { monthly_total: monthlyTotal, yearly_total: yearlyTotal } })
       return NextResponse.json<AssistantResponse>({
         kind: "query",
         message: "Here’s what you’re spending.",
@@ -156,6 +181,7 @@ export async function POST(req: NextRequest) {
 
       if (error) throw error
       await logEvent("ok")
+      await logActivity("query", { message: "upcoming_renewals", data: { items: subs ?? [] } })
       return NextResponse.json<AssistantResponse>({
         kind: "query",
         message: "Upcoming renewals in the next 30 days.",
@@ -210,6 +236,7 @@ export async function POST(req: NextRequest) {
       if (error) throw error
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
       await logEvent("ok")
+      await logActivity("action", { message: "add_subscription", data: created ?? null, sync })
       return NextResponse.json<AssistantResponse>({
         kind: "action",
         message: `Added subscription: ${created?.service ?? args.service}`,
@@ -225,15 +252,18 @@ export async function POST(req: NextRequest) {
       if (!args?.title || typeof args.title !== "string" || !args.title.trim()) {
         const msg = "Missing task title."
         await logEvent("error", msg)
+        await logActivity("error", { message: msg, parsed, preview })
         return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
       }
       const dueAt = typeof args.dueAt === "string" ? parseMaybeIsoDateTime(args.dueAt) : null
+      const dueDate = dueAt ? dueAt.slice(0, 10) : null
       const { data: created, error } = await supabase
         .from("tasks")
         .insert({
           user_id: userId,
           title: args.title.trim(),
           due_at: dueAt,
+          due_date: dueDate,
           status: "open",
         })
         .select("id,title,due_at,status,created_at")
@@ -242,6 +272,7 @@ export async function POST(req: NextRequest) {
       if (error) throw error
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_task", payload: { record_id: created.id } })
       await logEvent("ok")
+      await logActivity("action", { message: "add_task", data: created ?? null, sync })
       return NextResponse.json<AssistantResponse>({
         kind: "action",
         message: `Added task: ${created?.title ?? args.title}`,
@@ -257,6 +288,7 @@ export async function POST(req: NextRequest) {
       if (!args?.title || typeof args.title !== "string" || !args.title.trim()) {
         const msg = "Missing plan title."
         await logEvent("error", msg)
+        await logActivity("error", { message: msg, parsed, preview })
         return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
       }
       const startDate = typeof args.startDate === "string" ? toIsoDateOnly(args.startDate) : null
@@ -270,6 +302,7 @@ export async function POST(req: NextRequest) {
           title: args.title.trim(),
           start_date: startDate,
           end_date: endDate,
+          target_date: endDate,
           budget_cents: budgetCents,
         })
         .select("id,title,start_date,end_date,budget_cents,created_at")
@@ -278,6 +311,7 @@ export async function POST(req: NextRequest) {
       if (error) throw error
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_plan", payload: { record_id: created.id } })
       await logEvent("ok")
+      await logActivity("action", { message: "add_plan", data: created ?? null, sync })
       return NextResponse.json<AssistantResponse>({
         kind: "action",
         message: `Added plan: ${created?.title ?? args.title}`,
@@ -289,6 +323,7 @@ export async function POST(req: NextRequest) {
     }
 
     await logEvent("error", "Unsupported command.")
+    await logActivity("error", { message: "Unsupported command.", parsed, preview })
     return NextResponse.json<AssistantResponse>(
       { kind: "error", message: "Unsupported command.", details: parsed, parsed, preview },
       { status: 400 }
@@ -296,6 +331,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unexpected error"
     await logEvent("error", message)
+    await logActivity("error", { message, parsed, preview })
     return NextResponse.json<AssistantResponse>({ kind: "error", message, parsed, preview }, { status: 500 })
   }
 }

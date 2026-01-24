@@ -36,24 +36,23 @@ import { humanizeError } from "@/lib/humanizeError"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown } from "lucide-react"
 
-function formatPriceDollars(priceCents: number): string {
-  return (priceCents / 100).toFixed(2)
+function formatPriceDollars(price: number): string {
+  return Number.isFinite(price) ? price.toFixed(2) : "0.00"
 }
 
 function planKey(p: Plan): string {
-  return `${p.name}__${p.period}__${p.priceCents}`
+  return `${p.name}__${p.period}__${p.price}`
 }
 
 function isCustomPlan(p: Plan | undefined): boolean {
   if (!p) return true
-  return p.name.trim().toLowerCase() === "custom" || p.priceCents === 0
+  return p.name.trim().toLowerCase() === "custom" || p.price === 0
 }
 
 const FALLBACK_CUSTOM_PLAN: Plan = {
   name: "Custom",
   period: "monthly",
-  priceCents: 0,
-  currency: "USD",
+  price: 0,
   note: "Set your own price",
 }
 
@@ -122,7 +121,7 @@ export default function AddSubscriptionDialog({
       category: match?.category ?? prev.category,
       plan: preferred?.name ?? "",
       period: preferred?.period ?? prev.period,
-      price: preferred && preferred.priceCents > 0 ? formatPriceDollars(preferred.priceCents) : "",
+      price: preferred && preferred.price > 0 ? formatPriceDollars(preferred.price) : "",
     }))
     setSelectedPlanKey(preferred ? planKey(preferred) : planKey(FALLBACK_CUSTOM_PLAN))
     setServicePickerOpen(false)
@@ -140,7 +139,7 @@ export default function AddSubscriptionDialog({
       ...prev,
       plan: match.name,
       period: match.period,
-      price: match.priceCents > 0 ? formatPriceDollars(match.priceCents) : "",
+      price: match.price > 0 ? formatPriceDollars(match.price) : "",
       category: selectedService?.category ?? prev.category,
     }))
     setSelectedPlanKey(key)
@@ -162,7 +161,7 @@ export default function AddSubscriptionDialog({
     if (isCustomPlan(selectedPlan)) {
       if (!typedValid) newErrors.price = "Enter your price"
     } else {
-      if (!typedValid && !(selectedPlan && selectedPlan.priceCents > 0)) newErrors.price = "Price is required"
+      if (!typedValid && !(selectedPlan && selectedPlan.price > 0)) newErrors.price = "Price is required"
       if (hasTyped && !typedValid) newErrors.price = "Please enter a valid price"
     }
 
@@ -198,7 +197,8 @@ export default function AddSubscriptionDialog({
       const selectedPlan = effectivePlans.find((p) => planKey(p) === selectedPlanKey) ?? effectivePlans[0]
       const typed = parseFloat(formData.price)
       const typedValid = formData.price.trim().length > 0 && !Number.isNaN(typed) && typed > 0
-      const priceCents = typedValid ? Math.round(typed * 100) : selectedPlan && selectedPlan.priceCents > 0 ? selectedPlan.priceCents : 0
+      const priceCents =
+        typedValid ? Math.round(typed * 100) : selectedPlan && selectedPlan.price > 0 ? Math.round(selectedPlan.price * 100) : 0
       const period = formData.period === "monthly" || formData.period === "yearly" 
         ? formData.period 
         : "monthly"
@@ -373,11 +373,12 @@ export default function AddSubscriptionDialog({
                 <SelectContent>
                   {(selectedService?.plans ?? [FALLBACK_CUSTOM_PLAN]).map((p) => (
                     <SelectItem key={planKey(p)} value={planKey(p)}>
-                      {p.name} • {p.priceCents > 0 ? `$${(p.priceCents / 100).toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
+                      {p.name} • {p.price > 0 ? `$${p.price.toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">Defaults are editable. Prices may vary by region.</p>
             </div>
 
             <div className="space-y-2">

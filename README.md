@@ -23,6 +23,7 @@ The integrations + async sync tables are added in:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `APP_URL` (absolute origin, e.g. `https://your-domain`)
+- `NEXT_PUBLIC_APP_URL` (optional but recommended; same origin as `APP_URL`)
 
 ### Required (server only)
 
@@ -43,8 +44,8 @@ The integrations + async sync tables are added in:
 
 Configure the following redirect URIs in each provider dashboard (built from `APP_URL`):
 
-- **Google**: `${APP_URL}/api/integrations/google/callback`
-- **Notion**: `${APP_URL}/api/integrations/notion/callback`
+- **Google**: `${APP_URL}/api/oauth/google/callback`
+- **Notion**: `${APP_URL}/api/oauth/notion/callback`
 
 ## Sync runner (Vercel Cron suggestion)
 

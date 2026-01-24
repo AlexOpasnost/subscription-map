@@ -36,24 +36,23 @@ import { humanizeError, withTimeout } from "@/lib/humanizeError"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
-function formatPriceDollars(priceCents: number): string {
-  return (priceCents / 100).toFixed(2)
+function formatPriceDollars(price: number): string {
+  return Number.isFinite(price) ? price.toFixed(2) : "0.00"
 }
 
 function planKey(p: Plan): string {
-  return `${p.name}__${p.period}__${p.priceCents}`
+  return `${p.name}__${p.period}__${p.price}`
 }
 
 function isCustomPlan(p: Plan | undefined): boolean {
   if (!p) return true
-  return p.name.trim().toLowerCase() === "custom" || p.priceCents === 0
+  return p.name.trim().toLowerCase() === "custom" || p.price === 0
 }
 
 const FALLBACK_CUSTOM_PLAN: Plan = {
   name: "Custom",
   period: "monthly",
-  priceCents: 0,
-  currency: "USD",
+  price: 0,
   note: "Set your own price",
 }
 
@@ -130,7 +129,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     const hasTypedPrice = formData.price.trim().length > 0 && !Number.isNaN(typed) && typed > 0
     if (isCustomPlan(selectedPlan)) return hasTypedPrice
     // Non-custom plan: allow empty price (we'll use plan.priceCents), but allow override if user typed.
-    return hasTypedPrice || (!!selectedPlan && selectedPlan.priceCents > 0)
+    return hasTypedPrice || (!!selectedPlan && selectedPlan.price > 0)
   }, [formData.price, formData.serviceName, loading, selectedPlan])
 
   const serviceError =
@@ -149,7 +148,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
     // Non-custom plan: allow blank (we'll use plan defaults), but if user typed something invalid show feedback.
     if (hasTyped && !typedValid) return "Please enter a valid price"
-    return selectedPlan && selectedPlan.priceCents > 0 ? undefined : "Price is required"
+    return selectedPlan && selectedPlan.price > 0 ? undefined : "Price is required"
   }, [errors.price, formData.price, selectedPlan, touched.price])
 
   const applyServiceSelection = (nextServiceName: string) => {
@@ -165,7 +164,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       const nextCategory = match?.category ? match.category : ""
       const nextPeriod = preferred?.period ?? "monthly"
       const nextPrice =
-        typeof preferred?.priceCents === "number" && preferred.priceCents > 0 ? formatPriceDollars(preferred.priceCents) : ""
+        typeof preferred?.price === "number" && preferred.price > 0 ? formatPriceDollars(preferred.price) : ""
       return {
         ...prev,
         serviceName: name,
@@ -195,7 +194,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       ...prev,
       plan: match.name,
       period: match.period,
-      price: match.priceCents > 0 ? formatPriceDollars(match.priceCents) : "",
+      price: match.price > 0 ? formatPriceDollars(match.price) : "",
       category: !dirty.category && selectedService?.category ? selectedService.category : prev.category,
     }))
     setSelectedPlanKey(key)
@@ -230,7 +229,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       }
     } else {
       // Non-custom plan: allow using plan price even if input is blank.
-      if (!typedValid && !(selectedPlan && selectedPlan.priceCents > 0)) {
+      if (!typedValid && !(selectedPlan && selectedPlan.price > 0)) {
         newErrors.price = "Price is required"
       }
     }
@@ -263,7 +262,8 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
     const typed = parseFloat(formData.price)
     const typedValid = formData.price.trim().length > 0 && !Number.isNaN(typed) && typed > 0
-    const priceCents = typedValid ? Math.round(typed * 100) : selectedPlan && selectedPlan.priceCents > 0 ? selectedPlan.priceCents : 0
+    const priceCents =
+      typedValid ? Math.round(typed * 100) : selectedPlan && selectedPlan.price > 0 ? Math.round(selectedPlan.price * 100) : 0
     const period = formData.period === "monthly" || formData.period === "yearly" 
       ? formData.period 
       : "monthly"
@@ -512,11 +512,12 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       {(selectedService?.plans ?? [FALLBACK_CUSTOM_PLAN]).map((p) => (
                         <SelectItem key={planKey(p)} value={planKey(p)}>
                           {p.name} •{" "}
-                          {p.priceCents > 0 ? `$${(p.priceCents / 100).toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
+                          {p.price > 0 ? `$${p.price.toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">Defaults are editable. Prices may vary by region.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -549,7 +550,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                   ) : selectedPlan?.note ? (
                     <p className="text-xs text-muted-foreground">{selectedPlan.note}</p>
                   ) : (
-                    <p className="text-xs text-muted-foreground">Price varies by region.</p>
+                    <p className="text-xs text-muted-foreground">Defaults are editable. Prices may vary by region.</p>
                   )}
                 </div>
 

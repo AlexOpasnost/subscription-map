@@ -186,7 +186,10 @@ export function parseInput(text: string): { parsed: AssistantEventParsed; error?
   if (lower.startsWith("add plan ")) {
     const rest = raw.slice("add plan ".length).trim()
     const tokens = tokenize(rest)
-    const keywords = new Set(["from", "to", "budget"])
+    // Supported:
+    // - add plan <title> from YYYY-MM-DD to YYYY-MM-DD
+    // - add plan <title> by YYYY-MM-DD
+    const keywords = new Set(["from", "to", "by", "budget"])
 
     const firstKeywordIdx = tokens.findIndex((t) => keywords.has(t.toLowerCase()))
     const title = (firstKeywordIdx >= 0 ? tokens.slice(0, firstKeywordIdx) : tokens).join(" ").trim()
@@ -208,6 +211,13 @@ export function parseInput(text: string): { parsed: AssistantEventParsed; error?
         continue
       }
       if (key === "to") {
+        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+        const d = toIsoDateOnly(value)
+        if (d) args.endDate = d
+        i = nextIdx
+        continue
+      }
+      if (key === "by") {
         const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
         const d = toIsoDateOnly(value)
         if (d) args.endDate = d
@@ -260,7 +270,7 @@ export function getIntentPreview(parsed: AssistantEventParsed): AssistantPreview
     return {
       kind: "action",
       title: "Add plan",
-      summary: `Create plan “${title}”.`,
+      summary: endDate ? `Create plan “${title}” by ${endDate}.` : `Create plan “${title}”.`,
       details: { title, startDate, endDate },
     }
   }

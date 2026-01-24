@@ -1,15 +1,15 @@
-function normalizeAbsoluteUrl(input: string): string {
-  const raw = input.trim().replace(/\/+$/, "")
-  if (!raw) return ""
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw
-  return `https://${raw}`
-}
+import { getAppOriginServer } from "@/lib/env"
 
-export function getAppOrigin(): string {
-  const fromEnv = normalizeAbsoluteUrl(process.env.APP_URL ?? "")
-  if (!fromEnv) {
-    throw new Error("Missing environment variable: APP_URL (e.g. https://your-domain)")
-  }
-  return fromEnv
+/**
+ * Server-only helper for integration OAuth redirects.
+ *
+ * - Prefer `APP_URL` (server-only)
+ * - Fallback to `NEXT_PUBLIC_APP_URL`
+ * - Fallback to `VERCEL_URL`
+ *
+ * Throws only on the server when `required=true`.
+ */
+export function getAppOrigin(opts?: { required?: boolean }): string {
+  return getAppOriginServer({ required: opts?.required ?? true }) ?? "http://localhost:3000"
 }
 

@@ -2,13 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { getAppOrigin } from "@/lib/integrations/getAppOrigin"
 import { verifyIntegrationState } from "@/lib/integrations/state"
+import { requireServerEnv } from "@/lib/env"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
-
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v
-}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -23,8 +18,15 @@ function base64(input: string): string {
 }
 
 export async function GET(req: NextRequest) {
-  const appOrigin = getAppOrigin()
-  const redirectTo = new URL(`${appOrigin}/settings/integrations`)
+  const fallbackOrigin = req.nextUrl.origin
+  const appOrigin = (() => {
+    try {
+      return getAppOrigin({ required: false })
+    } catch {
+      return fallbackOrigin
+    }
+  })()
+  const redirectTo = new URL("/settings/integrations", appOrigin)
 
   try {
     const url = new URL(req.url)
@@ -47,8 +49,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(redirectTo)
     }
 
-    const clientId = getEnv("NOTION_CLIENT_ID")
-    const clientSecret = getEnv("NOTION_CLIENT_SECRET")
+    const clientId = requireServerEnv("NOTION_CLIENT_ID")
+    const clientSecret = requireServerEnv("NOTION_CLIENT_SECRET")
     const redirectUri = `${appOrigin}/api/integrations/notion/callback`
 
     const tokenRes = await fetch("https://api.notion.com/v1/oauth/token", {

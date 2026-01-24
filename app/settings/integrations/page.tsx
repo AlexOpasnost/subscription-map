@@ -9,6 +9,7 @@ import AppHeader from "@/components/AppHeader"
 import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { useToast } from "@/components/ToastProvider"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
@@ -19,6 +20,11 @@ type Provider = "google" | "notion"
 type IntegrationRow = {
   provider: Provider
   meta: unknown
+  created_at: string
+}
+
+type OAuthTokenRow = {
+  provider: Provider
   created_at: string
 }
 
@@ -38,18 +44,19 @@ export default function IntegrationsPage() {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
-  const [rows, setRows] = useState<IntegrationRow[]>([])
+  const [tokens, setTokens] = useState<OAuthTokenRow[]>([])
+  const [rows, setRows] = useState<IntegrationRow[]>([]) // meta/config (optional)
   const [busyProvider, setBusyProvider] = useState<Provider | null>(null)
   const [notionDatabaseId, setNotionDatabaseId] = useState("")
   const [savingNotionDb, setSavingNotionDb] = useState(false)
 
   const providers = useMemo(() => {
-    const set = new Set(rows.map((r) => r.provider))
+    const set = new Set(tokens.map((r) => r.provider))
     return {
       google: set.has("google"),
       notion: set.has("notion"),
     }
-  }, [rows])
+  }, [tokens])
 
   const notionRow = useMemo(() => rows.find((r) => r.provider === "notion") ?? null, [rows])
   const notionDbIdFromMeta = useMemo(() => getMetaString(notionRow?.meta, "notion_database_id"), [notionRow?.meta])
@@ -58,16 +65,18 @@ export default function IntegrationsPage() {
     if (!user) return
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from("integrations")
-        .select("provider,meta,created_at")
-        .order("created_at", { ascending: false })
-      if (error) throw error
-      const list = (data ?? []) as IntegrationRow[]
+      const [{ data: tokenData, error: tokenError }, { data: integrationData }] = await Promise.all([
+        supabase.from("oauth_tokens").select("provider,created_at").order("created_at", { ascending: false }),
+        // optional config/meta (used for Notion database id, etc.)
+        supabase.from("integrations").select("provider,meta,created_at").order("created_at", { ascending: false }),
+      ])
+      if (tokenError) throw tokenError
+      setTokens((tokenData ?? []) as OAuthTokenRow[])
+
+      const list = ((integrationData ?? []) as IntegrationRow[]) ?? []
       setRows(list)
       const notion = list.find((r) => r.provider === "notion")
-      const nextDbId = getMetaString(notion?.meta, "notion_database_id")
-      setNotionDatabaseId(nextDbId)
+      setNotionDatabaseId(getMetaString(notion?.meta, "notion_database_id"))
     } catch (err: unknown) {
       const msg = humanizeError(err)
       toast({ title: "Couldn’t load integrations", description: msg, variant: "error" })
@@ -107,25 +116,8 @@ export default function IntegrationsPage() {
     if (busyProvider) return
     setBusyProvider(provider)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
-        return
-      }
-
-      const res = await fetch(`/api/integrations/${provider}/start`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const json = (await res.json()) as { url?: unknown; error?: unknown }
-      const url = typeof json.url === "string" ? json.url : ""
-      const errMsg = typeof json.error === "string" ? json.error : "Couldn’t start OAuth"
-      if (!res.ok || !url) {
-        toast({ title: "Couldn’t start OAuth", description: errMsg, variant: "error" })
-        return
-      }
-      window.location.href = url
+      // Spec: start route takes user_id in query string and redirects to provider OAuth.
+      window.location.href = `/api/oauth/${provider}/start?user_id=${encodeURIComponent(user.id)}`
     } catch (err: unknown) {
       toast({ title: "Couldn’t start OAuth", description: humanizeError(err), variant: "error" })
     } finally {
@@ -138,8 +130,12 @@ export default function IntegrationsPage() {
     if (busyProvider) return
     setBusyProvider(provider)
     try {
-      const { error } = await supabase.from("integrations").delete().eq("provider", provider)
-      if (error) throw error
+      const [{ error: tokenError }, { error: integrationError }] = await Promise.all([
+        supabase.from("oauth_tokens").delete().eq("provider", provider),
+        supabase.from("integrations").delete().eq("provider", provider),
+      ])
+      if (tokenError) throw tokenError
+      if (integrationError) throw integrationError
       toast({ title: "Disconnected", variant: "success" })
       await load()
     } catch (err: unknown) {
@@ -295,6 +291,36 @@ export default function IntegrationsPage() {
               Syncing is async and resilient; actions enqueue jobs and a background runner pushes them to providers.
             </div>
           </div>
+        </GlassSurface>
+
+        <GlassSurface variant="subtle" className="p-0">
+          <Accordion type="single" collapsible className="w-full">
+            <AccordionItem value="how-to-configure" className="border-none">
+              <AccordionTrigger className="px-5 sm:px-6 py-4 hover:no-underline rounded-[24px] text-foreground/90 transition-colors hover:bg-white/5 data-[state=open]:bg-white/5">
+                How to configure (env vars + redirects)
+              </AccordionTrigger>
+              <AccordionContent className="px-5 sm:px-6 pb-6 pt-0">
+                <div className="space-y-3 text-sm text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
+                    Required on Vercel (do not paste secrets here):{" "}
+                    <span className="font-mono">APP_URL</span>,{" "}
+                    <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>,{" "}
+                    <span className="font-mono">GOOGLE_CLIENT_ID</span>,{" "}
+                    <span className="font-mono">GOOGLE_CLIENT_SECRET</span>,{" "}
+                    <span className="font-mono">NOTION_CLIENT_ID</span>,{" "}
+                    <span className="font-mono">NOTION_CLIENT_SECRET</span>.
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Redirect URLs (built from <span className="font-mono">APP_URL</span>):
+                    <div className="mt-2 space-y-1 font-mono text-[12px]">
+                      <div>{`$APP_URL/api/oauth/google/callback`}</div>
+                      <div>{`$APP_URL/api/oauth/notion/callback`}</div>
+                    </div>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </GlassSurface>
 
         <Card
