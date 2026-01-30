@@ -60,7 +60,9 @@ export default function SubscriptionCard({
         // Temporary highlight overlay (fades out smoothly)
         "after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:opacity-0 after:transition-opacity after:duration-500 after:bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]",
         cancelled ? "opacity-70" : "hover:-translate-y-px hover:shadow-[0_26px_90px_rgba(0,0,0,0.55)]",
-        highlighted ? "after:opacity-100 shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_26px_90px_rgba(0,0,0,0.55)]" : ""
+        highlighted
+          ? "animate-subscription-pop after:opacity-100 shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_26px_90px_rgba(0,0,0,0.55)]"
+          : ""
       )}
     >
       <div className="p-4 sm:p-5">

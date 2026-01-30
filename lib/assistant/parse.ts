@@ -99,71 +99,146 @@ export function parseInput(text: string): { parsed: AssistantEventParsed; error?
   if (lower.startsWith("add subscription ")) {
     const rest = raw.slice("add subscription ".length).trim()
     const tokens = tokenize(rest)
-    const keywords = new Set(["plan", "category", "renew", "remind"])
+    const keywords = new Set(["plan", "category", "renew", "remind", "price", "period"])
 
-    const periodIdx = tokens.findIndex((t) => {
+    const hasKeywordStyle = tokens.some((t) => {
       const v = t.toLowerCase()
-      return v === "monthly" || v === "yearly"
+      return v === "price" || v === "period" || v === "plan" || v === "category"
     })
-    if (periodIdx < 0) {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing billing period (monthly|yearly)." }
-    }
 
-    const priceIdx = tokens.findIndex((t) => parseCurrencyToCents(t) !== null)
-    if (priceIdx < 0) {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing price (e.g. 12.99)." }
-    }
-    if (priceIdx >= periodIdx) {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Expected: add subscription <service> <price> <monthly|yearly> ..." }
-    }
+    let service = ""
+    let priceCents: number | null = null
+    let period: Period = "monthly"
+    const args: AddSubscriptionArgs = { service: "", priceCents: 0, period }
 
-    const service = tokens.slice(0, priceIdx).join(" ").trim()
-    const priceCents = parseCurrencyToCents(tokens[priceIdx] ?? "")
-    const periodToken = (tokens[periodIdx] ?? "").toLowerCase() as Period
-    if (!service) return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing service name." }
-    if (!priceCents) return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Invalid price." }
-    if (periodToken !== "monthly" && periodToken !== "yearly") {
-      return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Invalid period (monthly|yearly)." }
-    }
+    const firstKeywordIdx = tokens.findIndex((t) => keywords.has(t.toLowerCase()))
 
-    const args: AddSubscriptionArgs = { service, priceCents, period: periodToken }
+    if (hasKeywordStyle && firstKeywordIdx > 0) {
+      // Keyword-driven format, e.g.:
+      // add subscription Netflix plan Standard price 15.49 period monthly category Entertainment
+      service = tokens.slice(0, firstKeywordIdx).join(" ").trim()
+      let i = firstKeywordIdx
+      while (i < tokens.length) {
+        const key = tokens[i]?.toLowerCase()
+        if (!key || !keywords.has(key)) {
+          i++
+          continue
+        }
 
-    let i = periodIdx + 1
-    while (i < tokens.length) {
-      const key = tokens[i]?.toLowerCase()
-      if (!key) break
-      if (!keywords.has(key)) {
+        if (key === "price") {
+          const cents = parseCurrencyToCents(tokens[i + 1] ?? "")
+          if (cents !== null) priceCents = cents
+          i = i + 2
+          continue
+        }
+
+        if (key === "period") {
+          const v = (tokens[i + 1] ?? "").toLowerCase()
+          if (v === "monthly" || v === "yearly") period = v as Period
+          i = i + 2
+          continue
+        }
+
+        if (key === "plan") {
+          const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+          if (value) args.plan = value
+          i = nextIdx
+          continue
+        }
+
+        if (key === "category") {
+          const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+          if (value) args.category = value
+          i = nextIdx
+          continue
+        }
+
+        if (key === "renew") {
+          const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+          const d = toIsoDateOnly(value)
+          if (d) args.renewDate = d
+          i = nextIdx
+          continue
+        }
+
+        if (key === "remind") {
+          const n = Number(tokens[i + 1])
+          if (Number.isFinite(n) && n > 0) args.remindDays = Math.floor(n)
+          i = i + 2
+          continue
+        }
+
         i++
-        continue
       }
-      if (key === "plan") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        if (value) args.plan = value
-        i = nextIdx
-        continue
+    } else {
+      // Positional format, e.g.: add subscription Spotify 10.99 monthly
+      const priceIdx = tokens.findIndex((t) => parseCurrencyToCents(t) !== null)
+      if (priceIdx < 0) {
+        return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing price (e.g. 12.99)." }
       }
-      if (key === "category") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        if (value) args.category = value
-        i = nextIdx
-        continue
+
+      service = tokens.slice(0, priceIdx).join(" ").trim()
+      priceCents = parseCurrencyToCents(tokens[priceIdx] ?? "")
+      const maybePeriod = (tokens[priceIdx + 1] ?? "").toLowerCase()
+      if (maybePeriod === "monthly" || maybePeriod === "yearly") {
+        period = maybePeriod as Period
       }
-      if (key === "renew") {
-        const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
-        const d = toIsoDateOnly(value)
-        if (d) args.renewDate = d
-        i = nextIdx
-        continue
+
+      // Parse optional keyword segments after price / optional period.
+      let i = priceIdx + 1 + (maybePeriod === "monthly" || maybePeriod === "yearly" ? 1 : 0)
+      while (i < tokens.length) {
+        const key = tokens[i]?.toLowerCase()
+        if (!key || !keywords.has(key)) {
+          i++
+          continue
+        }
+        if (key === "plan") {
+          const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+          if (value) args.plan = value
+          i = nextIdx
+          continue
+        }
+        if (key === "category") {
+          const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+          if (value) args.category = value
+          i = nextIdx
+          continue
+        }
+        if (key === "renew") {
+          const { value, nextIdx } = sliceUntilKeyword(tokens, i + 1, keywords)
+          const d = toIsoDateOnly(value)
+          if (d) args.renewDate = d
+          i = nextIdx
+          continue
+        }
+        if (key === "remind") {
+          const n = Number(tokens[i + 1])
+          if (Number.isFinite(n) && n > 0) args.remindDays = Math.floor(n)
+          i = i + 2
+          continue
+        }
+        if (key === "period") {
+          const v = (tokens[i + 1] ?? "").toLowerCase()
+          if (v === "monthly" || v === "yearly") period = v as Period
+          i = i + 2
+          continue
+        }
+        if (key === "price") {
+          const cents = parseCurrencyToCents(tokens[i + 1] ?? "")
+          if (cents !== null) priceCents = cents
+          i = i + 2
+          continue
+        }
+        i++
       }
-      if (key === "remind") {
-        const n = Number(tokens[i + 1])
-        if (Number.isFinite(n) && n > 0) args.remindDays = Math.floor(n)
-        i = i + 2
-        continue
-      }
-      i++
     }
 
+    if (!service) return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing service name." }
+    if (!priceCents) return { parsed: { kind: "action", action: "add_subscription", args: {} }, error: "Missing or invalid price." }
+
+    args.service = service
+    args.priceCents = priceCents
+    args.period = period
     return { parsed: { kind: "action", action: "add_subscription", args } }
   }
 

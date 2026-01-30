@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 
 import type { AddPlanArgs, AddSubscriptionArgs, AddTaskArgs, Period } from "@/lib/assistant/parse"
 import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
+import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
 
 type AssistantOkResponse = {
@@ -55,13 +56,24 @@ function getBearerToken(req: NextRequest): string | null {
   return m ? m[1].trim() : null
 }
 
+function extractErrorMessage(err: unknown): string {
+  if (!err) return ""
+  if (typeof err === "string") return err
+  if (err instanceof Error) return err.message ?? ""
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const msg = (err as { message?: unknown }).message
+    if (typeof msg === "string") return msg
+  }
+  return ""
+}
+
 export async function POST(req: NextRequest) {
   const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
   const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
   const token = getBearerToken(req)
   if (!token) {
-    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Unauthorized" }, { status: 401 })
+    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Not authenticated" }, { status: 401 })
   }
 
   let body: { text?: unknown; command?: unknown; userId?: unknown }
@@ -87,40 +99,55 @@ export async function POST(req: NextRequest) {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   })
 
-  const { data: userData, error: userError } = await supabase.auth.getUser(token)
-  const userId = userData?.user?.id ?? null
-  if (userError || !userId) {
-    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Unauthorized" }, { status: 401 })
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError) console.error("[assistant] auth.getUser error", authError)
+  if (!user) {
+    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Not authenticated" }, { status: 401 })
   }
+  const userId = user.id
 
   const claimedUserId = typeof body.userId === "string" ? body.userId.trim() : ""
   if (claimedUserId && claimedUserId !== userId) {
-    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Unauthorized" }, { status: 401 })
+    return NextResponse.json<AssistantResponse>({ kind: "error", message: "Not authenticated" }, { status: 401 })
   }
 
   const { parsed, error: parseError } = parseInput(text)
   const preview = getIntentPreview(parsed)
 
   async function logEvent(status: "ok" | "error", error?: string) {
-    await supabase.from("assistant_events").insert({
-      user_id: userId,
-      input_text: text,
-      parsed,
-      status,
-      error: error ?? null,
-    })
+    try {
+      // Never attempt to insert without a user_id; RLS expects auth.uid() = user_id.
+      if (!userId) throw new Error("Not authenticated")
+      const { error: insertError } = await supabase.from("assistant_events").insert({
+        user_id: userId,
+        input_text: text,
+        parsed,
+        status,
+        error: error ?? null,
+      })
+      if (insertError) console.error("[assistant] assistant_events insert error", insertError)
+    } catch (err) {
+      console.error("[assistant] logEvent failed", err)
+    }
   }
 
   async function logActivity(kind: "action" | "query" | "error", result: Record<string, unknown>) {
     try {
-      await supabase.from("assistant_activity").insert({
+      // Never attempt to insert without a user_id; RLS expects auth.uid() = user_id.
+      if (!userId) throw new Error("Not authenticated")
+      const { error: insertError } = await supabase.from("assistant_activity").insert({
         user_id: userId,
         kind,
         command: text,
         result,
       })
-    } catch {
-      // best-effort; never block the assistant
+      if (insertError) console.error("[assistant] assistant_activity insert error", insertError)
+    } catch (err) {
+      // best-effort; never block the assistant, but do log server-side details
+      console.error("[assistant] logActivity failed", err)
     }
   }
 
@@ -141,7 +168,10 @@ export async function POST(req: NextRequest) {
         .select("price_cents,period,cancelled")
         .eq("cancelled", false)
 
-      if (error) throw error
+      if (error) {
+        console.error("[assistant] subscriptions select error (spending)", error)
+        throw new Error(error.message)
+      }
       const rows = (subs ?? []) as Array<{ price_cents: number; period: Period; cancelled: boolean }>
       const monthlyTotal = rows.reduce((sum, r) => {
         const price = (r.price_cents ?? 0) / 100
@@ -179,7 +209,10 @@ export async function POST(req: NextRequest) {
         .lte("renewal_date", endIso)
         .order("renewal_date", { ascending: true })
 
-      if (error) throw error
+      if (error) {
+        console.error("[assistant] subscriptions select error (upcoming_renewals)", error)
+        throw new Error(error.message)
+      }
       await logEvent("ok")
       await logActivity("query", { message: "upcoming_renewals", data: { items: subs ?? [] } })
       return NextResponse.json<AssistantResponse>({
@@ -203,43 +236,32 @@ export async function POST(req: NextRequest) {
         await logEvent("error", msg)
         return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
       }
-      if (args.period !== "monthly" && args.period !== "yearly") {
-        const msg = "Missing or invalid period."
-        await logEvent("error", msg)
-        return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
-      }
-
+      const period = args.period === "yearly" ? "yearly" : "monthly"
       const category = typeof args.category === "string" && args.category.trim() ? args.category.trim() : "Other"
-      const reminderDays = typeof args.remindDays === "number" && args.remindDays > 0 ? Math.floor(args.remindDays) : 3
+      const reminderDays = typeof args.remindDays === "number" && args.remindDays > 0 ? Math.floor(args.remindDays) : null
+      const renewalDate = typeof args.renewDate === "string" ? toIsoDateOnly(args.renewDate) : null
 
-      const insertPayload: Record<string, unknown> = {
-        user_id: userId,
-        service: args.service.trim(),
-        plan: typeof args.plan === "string" && args.plan.trim() ? args.plan.trim() : null,
-        price_cents: args.priceCents,
-        period: args.period,
-        category,
-        cancelled: false,
-        reminder_days: reminderDays,
-      }
-      if (typeof args.renewDate === "string") {
-        const d = toIsoDateOnly(args.renewDate)
-        if (d) insertPayload.renewal_date = d
-      }
-
-      const { data: created, error } = await supabase
-        .from("subscriptions")
-        .insert(insertPayload)
-        .select("id,service,plan,price_cents,period,category,cancelled,renewal_date,reminder_days,created_at")
-        .single()
-
-      if (error) throw error
+      const created = await createSubscription(
+        {
+          service: args.service.trim(),
+          plan: typeof args.plan === "string" && args.plan.trim() ? args.plan.trim() : null,
+          priceCents: args.priceCents,
+          period,
+          category,
+          reminderDays,
+          renewalDate,
+        },
+        { accessToken: token }
+      )
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
       await logEvent("ok")
-      await logActivity("action", { message: "add_subscription", data: created ?? null, sync })
+      const planLabel = created.plan ? ` (${created.plan})` : ""
+      const per = created.period === "yearly" ? "/yr" : "/mo"
+      const pretty = `Added ${created.service}${planLabel} $${(created.price_cents / 100).toFixed(2)}${per}`
+      await logActivity("action", { message: pretty, data: created ?? null, sync })
       return NextResponse.json<AssistantResponse>({
         kind: "action",
-        message: `Added subscription: ${created?.service ?? args.service}`,
+        message: pretty,
         data: created ?? null,
         parsed,
         preview,
@@ -269,7 +291,10 @@ export async function POST(req: NextRequest) {
         .select("id,title,due_at,status,created_at")
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("[assistant] tasks insert error", error)
+        throw new Error(error.message)
+      }
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_task", payload: { record_id: created.id } })
       await logEvent("ok")
       await logActivity("action", { message: "add_task", data: created ?? null, sync })
@@ -308,7 +333,10 @@ export async function POST(req: NextRequest) {
         .select("id,title,start_date,end_date,budget_cents,created_at")
         .single()
 
-      if (error) throw error
+      if (error) {
+        console.error("[assistant] plans insert error", error)
+        throw new Error(error.message)
+      }
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_plan", payload: { record_id: created.id } })
       await logEvent("ok")
       await logActivity("action", { message: "add_plan", data: created ?? null, sync })
@@ -329,7 +357,8 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     )
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Unexpected error"
+    console.error("[assistant] command handling error", err)
+    const message = extractErrorMessage(err) || "Unexpected error"
     await logEvent("error", message)
     await logActivity("error", { message, parsed, preview })
     return NextResponse.json<AssistantResponse>({ kind: "error", message, parsed, preview }, { status: 500 })

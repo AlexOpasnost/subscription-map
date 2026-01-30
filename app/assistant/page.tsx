@@ -11,6 +11,7 @@ import { useToast } from "@/components/ToastProvider"
 import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
+import { humanizeError } from "@/lib/humanizeError"
 
 type AssistantApiResponse =
   | { kind: "action" | "query"; message: string; data?: unknown; preview?: unknown; sync?: { enqueued: number } }
@@ -120,6 +121,7 @@ export default function AssistantPage() {
 
     setSending(true)
     setLastResult(null)
+    const parsedNow = parseInput(text.trim()).parsed
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
@@ -141,18 +143,37 @@ export default function AssistantPage() {
       setLastResult(json)
 
       if (!res.ok || json.kind === "error") {
-        toast({ title: "Couldn’t save", description: json.message, variant: "error" })
+        console.error("[assistant] save failed", { status: res.status, json })
+        const raw = json.message ?? "Unexpected error"
+        const friendly = humanizeError(raw)
+        const needsRlsHint = raw.toLowerCase().includes("row level security") || raw.toLowerCase().includes("rls")
+        const extra = needsRlsHint ? " This looks like an RLS policy issue—check your `subscriptions` policies." : ""
+        toast({
+          title: "Couldn’t save",
+          description: `${friendly} See console for details.${extra}`,
+          variant: "error",
+        })
         return
       }
 
       const enqueued = typeof json.sync?.enqueued === "number" ? json.sync.enqueued : 0
       const suffix = enqueued > 0 ? ` (Sync queued for ${enqueued})` : ""
-      toast({ title: "Saved", description: `${json.message}${suffix}`, variant: "success" })
+      const isAddSubscription =
+        parsedNow.kind === "action" && "action" in parsedNow && parsedNow.action === "add_subscription"
+      toast({
+        title: isAddSubscription ? "Subscription added" : "Saved",
+        description: `${json.message}${suffix}`,
+        variant: "success",
+      })
       setText("")
       await loadEvents()
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unexpected error"
-      toast({ title: "Couldn’t save", description: msg, variant: "error" })
+      console.error("[assistant] send failed", err)
+      const raw = err instanceof Error ? err.message : "Unexpected error"
+      const friendly = humanizeError(raw)
+      const needsRlsHint = raw.toLowerCase().includes("row level security") || raw.toLowerCase().includes("rls")
+      const extra = needsRlsHint ? " This looks like an RLS policy issue—check your `subscriptions` policies." : ""
+      toast({ title: "Couldn’t save", description: `${friendly} See console for details.${extra}`, variant: "error" })
     } finally {
       setSending(false)
     }

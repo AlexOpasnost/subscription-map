@@ -30,9 +30,9 @@ import {
 } from "@/components/ui/select"
 import { subscriptionCatalog, type Period, type Plan } from "@/lib/subscriptionCatalog"
 import { useAuth } from "@/lib/supabase/auth"
-import { supabase } from "@/lib/supabase/client"
 import { useToast } from "@/components/ToastProvider"
 import { humanizeError, withTimeout } from "@/lib/humanizeError"
+import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { cn } from "@/lib/utils"
 import { Check, ChevronsUpDown, Plus } from "lucide-react"
 
@@ -276,28 +276,16 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     const safeCategory = (sanitizedCategory ?? "").trim() || "Other"
 
     try {
-      const { data: created, error } = await withTimeout(
-        supabase
-          .from("subscriptions")
-          .insert({
-            user_id: user.id,
-            service: formData.serviceName.trim(),
-            plan: formData.plan.trim() ? formData.plan.trim() : null,
-            price_cents: priceCents,
-            period: period,
-            category: safeCategory,
-            cancelled: false,
-            cancel_url: selectedService?.cancelUrl?.trim() ? selectedService.cancelUrl.trim() : null,
-          })
-          .select("id,service,plan,price_cents,period,category,cancelled,renewal_date,reminder_days,created_at")
-          .single()
+      const created = await withTimeout(
+        createSubscription({
+          service: formData.serviceName.trim(),
+          plan: formData.plan.trim() ? formData.plan.trim() : null,
+          priceCents,
+          period,
+          category: safeCategory,
+          cancelUrl: selectedService?.cancelUrl?.trim() ? selectedService.cancelUrl.trim() : null,
+        })
       )
-
-      if (error) {
-        setSubmitError(humanizeError(error))
-        toast({ title: "Couldn’t add subscription", description: humanizeError(error), variant: "error" })
-        return
-      }
 
       // Reset form
       setFormData({
