@@ -13,15 +13,6 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command"
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -110,6 +101,21 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     return subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === key)
   }, [formData.serviceName])
 
+  const knownPlans = useMemo(() => selectedService?.plans ?? [], [selectedService])
+  const hasKnownPlans = useMemo(() => !!selectedService && knownPlans.length > 0, [knownPlans, selectedService])
+
+  const filteredServices = useMemo(() => {
+    const q = serviceQuery.trim().toLowerCase()
+    const base = q ? subscriptionCatalog.filter((s) => s.name.toLowerCase().includes(q)) : subscriptionCatalog
+    return base.slice().sort((a, b) => a.name.localeCompare(b.name)).slice(0, 60)
+  }, [serviceQuery])
+
+  const exactServiceMatch = useMemo(() => {
+    const q = serviceQuery.trim().toLowerCase()
+    if (!q) return false
+    return subscriptionCatalog.some((s) => s.name.trim().toLowerCase() === q)
+  }, [serviceQuery])
+
   const selectedPlan = useMemo(() => {
     // If the service isn't in our catalog (custom typed), fall back to a "Custom" plan.
     if (!selectedService) return formData.serviceName.trim() ? FALLBACK_CUSTOM_PLAN : undefined
@@ -168,14 +174,14 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       return {
         ...prev,
         serviceName: name,
-        plan: preferred?.name ?? "Custom",
+        plan: preferred?.name ?? "",
         category: nextCategory,
         period: nextPeriod,
         price: nextPrice,
       }
     })
 
-    setSelectedPlanKey(preferred ? planKey(preferred) : planKey(FALLBACK_CUSTOM_PLAN))
+    setSelectedPlanKey(preferred ? planKey(preferred) : "")
     setServiceQuery("")
     setServicePickerOpen(false)
     setTouched((t) => ({ ...t, service: true }))
@@ -186,7 +192,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
   const handlePlanSelection = (key: string) => {
     if (loading) return
-    const plans = selectedService?.plans ?? (formData.serviceName.trim() ? [FALLBACK_CUSTOM_PLAN] : [])
+    const plans = selectedService?.plans ?? []
     const match = plans.find((p) => planKey(p) === key)
     if (!match) return
 
@@ -306,7 +312,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
     } catch (error: unknown) {
       const msg = humanizeError(error)
       setSubmitError(msg)
-      toast({ title: "Couldn’t add subscription", description: msg, variant: "error" })
+      toast({ title: "Failed to add", description: msg, variant: "error" })
     } finally {
       setLoading(false)
     }
@@ -387,98 +393,64 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
                       align="start"
                       className="w-[--radix-popover-trigger-width] p-0 bg-[rgba(19,20,23,0.92)] border border-white/10 rounded-2xl shadow-[0_22px_80px_rgba(0,0,0,0.65)] backdrop-blur-xl"
                     >
-                      <Command shouldFilter={false}>
-                        <CommandInput
-                          placeholder="Search (or type a custom service)…"
+                      <div className="p-3 border-b border-white/10">
+                        <Input
                           value={serviceQuery}
-                          onValueChange={setServiceQuery}
+                          onChange={(e) => setServiceQuery(e.target.value)}
+                          placeholder="Search (or type a custom service)…"
                           disabled={loading}
+                          autoFocus
                           onKeyDown={(e) => {
                             if (e.key !== "Enter") return
                             const q = serviceQuery.trim()
                             if (!q) return
                             e.preventDefault()
-                            const exact = subscriptionCatalog.find(
-                              (s) => s.name.trim().toLowerCase() === q.toLowerCase()
-                            )
+                            const exact = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === q.toLowerCase())
                             applyServiceSelection(exact ? exact.name : q)
                           }}
+                          className="h-10 rounded-xl bg-white/5 border-white/10"
                         />
-                        <CommandList>
-                          {(() => {
-                            const q = serviceQuery.trim().toLowerCase()
-                            const filtered = q
-                              ? subscriptionCatalog.filter((s) => s.name.toLowerCase().includes(q))
-                              : subscriptionCatalog
-                            const byCategory = new Map<string, typeof filtered>()
-                            for (const svc of filtered) {
-                              const cat = (svc.category || "Other").trim() || "Other"
-                              const list = byCategory.get(cat) ?? []
-                              list.push(svc)
-                              byCategory.set(cat, list)
-                            }
+                      </div>
+                      <div className="max-h-[320px] overflow-auto p-2">
+                        {serviceQuery.trim() && !exactServiceMatch ? (
+                          <button
+                            type="button"
+                            disabled={loading}
+                            onClick={() => applyServiceSelection(serviceQuery)}
+                            className="w-full text-left rounded-xl px-3 py-2 text-sm hover:bg-white/5 active:bg-white/8 disabled:opacity-50"
+                          >
+                            Create <span className="text-foreground/90 font-medium">“{serviceQuery.trim()}”</span>
+                          </button>
+                        ) : null}
 
-                            const exactMatch = q
-                              ? subscriptionCatalog.some((s) => s.name.trim().toLowerCase() === q)
-                              : false
-
-                            return (
-                              <>
-                                <CommandEmpty>
-                                  {q ? "No matches." : "Start typing to search."}
-                                </CommandEmpty>
-
-                                {q && !exactMatch ? (
-                                  <>
-                                    <CommandGroup heading="Custom">
-                                      <CommandItem
-                                        value={`__create__:${q}`}
-                                        onSelect={() => applyServiceSelection(serviceQuery)}
-                                      >
-                                        <span className="truncate">
-                                          Create <span className="text-foreground/90 font-medium">“{serviceQuery.trim()}”</span>
-                                        </span>
-                                      </CommandItem>
-                                    </CommandGroup>
-                                    <CommandSeparator />
-                                  </>
-                                ) : null}
-
-                                {Array.from(byCategory.entries())
-                                  .sort(([a], [b]) => a.localeCompare(b))
-                                  .map(([category, services]) => (
-                                    <CommandGroup key={category} heading={category}>
-                                      {services
-                                        .slice()
-                                        .sort((a, b) => a.name.localeCompare(b.name))
-                                        .slice(0, 50)
-                                        .map((svc) => {
-                                          const isSelected =
-                                            formData.serviceName.trim().toLowerCase() === svc.name.trim().toLowerCase()
-                                          return (
-                                            <CommandItem
-                                              key={svc.name}
-                                              value={svc.name}
-                                              onSelect={() => applyServiceSelection(svc.name)}
-                                            >
-                                              <Check
-                                                className={cn(
-                                                  "mr-2 h-4 w-4",
-                                                  isSelected ? "opacity-100 text-foreground/90" : "opacity-0"
-                                                )}
-                                                aria-hidden="true"
-                                              />
-                                              <span className="truncate">{svc.name}</span>
-                                            </CommandItem>
-                                          )
-                                        })}
-                                    </CommandGroup>
-                                  ))}
-                              </>
-                            )
-                          })()}
-                        </CommandList>
-                      </Command>
+                        {filteredServices.length === 0 ? (
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
+                            {serviceQuery.trim() ? "No matches." : "Start typing to search."}
+                          </div>
+                        ) : (
+                          <div className="mt-1 space-y-1">
+                            {filteredServices.map((svc) => {
+                              const isSelected = formData.serviceName.trim().toLowerCase() === svc.name.trim().toLowerCase()
+                              return (
+                                <button
+                                  key={svc.id}
+                                  type="button"
+                                  disabled={loading}
+                                  onClick={() => applyServiceSelection(svc.name)}
+                                  className={cn(
+                                    "w-full flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-white/5 active:bg-white/8 disabled:opacity-50",
+                                    isSelected ? "bg-white/5" : ""
+                                  )}
+                                >
+                                  <Check className={cn("h-4 w-4 shrink-0", isSelected ? "opacity-100" : "opacity-0")} aria-hidden="true" />
+                                  <span className="truncate">{svc.name}</span>
+                                  <span className="ml-auto text-xs text-muted-foreground">{(svc.category || "Other").trim() || "Other"}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </PopoverContent>
                   </Popover>
                   {serviceError && (
@@ -488,24 +460,46 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
 
                 <div className="space-y-2 sm:col-span-2">
                   <Label htmlFor="plan">Plan</Label>
-                  <Select
-                    value={selectedPlanKey || (selectedPlan ? planKey(selectedPlan) : "")}
-                    onValueChange={handlePlanSelection}
-                    disabled={loading || !formData.serviceName.trim()}
-                  >
-                    <SelectTrigger id="plan" disabled={loading || !formData.serviceName.trim()}>
-                      <SelectValue placeholder={formData.serviceName.trim() ? "Select a plan" : "Select a service first"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(selectedService?.plans ?? [FALLBACK_CUSTOM_PLAN]).map((p) => (
-                        <SelectItem key={planKey(p)} value={planKey(p)}>
-                          {p.name} •{" "}
-                          {p.price > 0 ? `$${p.price.toFixed(2)}` : "Set price"} /{p.period === "monthly" ? "mo" : "yr"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">Defaults are editable. Prices may vary by region.</p>
+                  {hasKnownPlans ? (
+                    <>
+                      <Select
+                        value={selectedPlanKey || (selectedPlan ? planKey(selectedPlan) : "")}
+                        onValueChange={handlePlanSelection}
+                        disabled={loading || !formData.serviceName.trim()}
+                      >
+                        <SelectTrigger id="plan" disabled={loading || !formData.serviceName.trim()}>
+                          <SelectValue placeholder={formData.serviceName.trim() ? "Select a plan" : "Select a service first"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {knownPlans.map((p) => {
+                            const per = p.period === "yearly" ? "yr" : "mo"
+                            const label = p.price > 0 ? `${p.name} — $${p.price.toFixed(2)}/${per}` : `${p.name} — set price`
+                            return (
+                              <SelectItem key={planKey(p)} value={planKey(p)}>
+                                {label}
+                              </SelectItem>
+                            )
+                          })}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">Selecting a plan auto-fills price and period. You can edit the price.</p>
+                    </>
+                  ) : (
+                    <>
+                      <Input
+                        id="plan"
+                        type="text"
+                        placeholder={formData.serviceName.trim() ? "e.g., Standard" : "Select a service first"}
+                        value={formData.plan}
+                        onChange={(e) => {
+                          setFormData({ ...formData, plan: e.target.value })
+                          setDirty((d) => ({ ...d, plan: true }))
+                        }}
+                        disabled={loading || !formData.serviceName.trim()}
+                      />
+                      <p className="text-xs text-muted-foreground">No predefined plans for this service. Enter any plan name (optional).</p>
+                    </>
+                  )}
                 </div>
 
                 <div className="space-y-2">

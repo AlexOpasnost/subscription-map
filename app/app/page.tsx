@@ -47,7 +47,7 @@ export default function AppPage() {
     const run = () => {
       tries += 1
       const el =
-        (document.getElementById(`subscription-${id}`) as HTMLElement | null) ??
+        (document.getElementById(`sub-${id}`) as HTMLElement | null) ??
         (document.querySelector(`[data-subscription-id="${CSS.escape(id)}"]`) as HTMLElement | null)
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" })
@@ -60,7 +60,7 @@ export default function AppPage() {
 
   useEffect(() => {
     if (!recentlyAddedId) return
-    const t = window.setTimeout(() => setRecentlyAddedId(null), 1100)
+    const t = window.setTimeout(() => setRecentlyAddedId(null), 1500)
     return () => window.clearTimeout(t)
   }, [recentlyAddedId])
 

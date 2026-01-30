@@ -53,7 +53,7 @@ export default function SubscriptionCard({
   return (
     <GlassSurface
       variant="subtle"
-      id={`subscription-${id}`}
+      id={`sub-${id}`}
       data-subscription-id={id}
       className={cn(
         "scroll-mt-24 bg-[linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))] transition-[transform,box-shadow] duration-200",
@@ -61,7 +61,7 @@ export default function SubscriptionCard({
         "after:pointer-events-none after:absolute after:inset-0 after:rounded-[inherit] after:opacity-0 after:transition-opacity after:duration-500 after:bg-[color:color-mix(in_srgb,var(--accent)_12%,transparent)]",
         cancelled ? "opacity-70" : "hover:-translate-y-px hover:shadow-[0_26px_90px_rgba(0,0,0,0.55)]",
         highlighted
-          ? "animate-subscription-pop after:opacity-100 shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_26px_90px_rgba(0,0,0,0.55)]"
+          ? "animate-subscription-pop ring-2 ring-blue-500/40 after:opacity-100 shadow-[0_0_0_1px_rgba(59,130,246,0.22),0_26px_90px_rgba(0,0,0,0.55)]"
           : ""
       )}
     >
