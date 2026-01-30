@@ -1,5 +1,14 @@
 "use client"
 
+/**
+ * How to verify:
+ * - `npm run dev`
+ * - Sign in
+ * - Type: `add task Pay rent due 2026-02-01`
+ * - Expect: toast "Task added", and a new entry in Activity
+ * - Refresh page, run "Refresh" → task still appears
+ */
+
 import { useEffect, useMemo, useState } from "react"
 
 import PageShell from "@/components/PageShell"
@@ -34,6 +43,14 @@ type AssistantActivityRow = {
   created_at: string
 }
 
+type TaskRow = {
+  id: string
+  title: string
+  due_date: string | null
+  status: string
+  created_at: string
+}
+
 type SpendingResult = { monthly_total: number; yearly_total: number }
 type UpcomingRenewalItem = {
   id: string
@@ -65,6 +82,29 @@ function isUpcomingRenewalsResult(v: unknown): v is UpcomingRenewalsResult {
   return true
 }
 
+type ParsedCommand =
+  | { kind: "add_task"; title: string; due_date: string | null }
+  | { kind: "unsupported" }
+
+function isIsoDateOnly(input: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.trim())
+  if (!m) return false
+  const dt = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`)
+  return Number.isFinite(dt.getTime())
+}
+
+function parseCommand(input: string): ParsedCommand {
+  const raw = input.trim()
+  if (!raw) return { kind: "unsupported" }
+  const m = /^add\s+task\s+(.+?)(?:\s+due\s+(\d{4}-\d{2}-\d{2}))?\s*$/i.exec(raw)
+  if (!m) return { kind: "unsupported" }
+  const title = (m[1] ?? "").trim()
+  const due = (m[2] ?? "").trim()
+  if (!title) return { kind: "unsupported" }
+  if (due && !isIsoDateOnly(due)) return { kind: "unsupported" }
+  return { kind: "add_task", title, due_date: due || null }
+}
+
 export default function AssistantPage() {
   const { user, signOut } = useAuth()
   const { toast } = useToast()
@@ -72,6 +112,7 @@ export default function AssistantPage() {
   const [sending, setSending] = useState(false)
   const [events, setEvents] = useState<AssistantEventRow[]>([])
   const [activity, setActivity] = useState<AssistantActivityRow[] | null>(null)
+  const [tasks, setTasks] = useState<TaskRow[] | null>(null)
   const [lastResult, setLastResult] = useState<AssistantApiResponse | null>(null)
 
   const canSend = useMemo(() => text.trim().length > 0 && !sending, [text, sending])
@@ -109,11 +150,47 @@ export default function AssistantPage() {
     setEvents((data ?? []) as AssistantEventRow[])
   }
 
+  const loadTasks = async () => {
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) return
+
+      const res = await fetch("/api/tasks/list", {
+        method: "GET",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const json = (await res.json()) as { ok: boolean; tasks?: TaskRow[]; error?: string }
+      if (!res.ok || !json.ok) {
+        console.error("[assistant] loadTasks failed", { status: res.status, json })
+        return
+      }
+      setTasks((json.tasks ?? []) as TaskRow[])
+    } catch (err) {
+      console.error("[assistant] loadTasks error", err)
+    }
+  }
+
   useEffect(() => {
     if (!user) return
     loadEvents()
+    loadTasks()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
+
+  const executeAddTask = async (cmd: { title: string; due_date: string | null }, token: string): Promise<TaskRow> => {
+    const res = await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ title: cmd.title, due_date: cmd.due_date }),
+    })
+    const json = (await res.json()) as { ok: boolean; task?: TaskRow; error?: string }
+    if (!res.ok || !json.ok || !json.task) {
+      const msg = (json && typeof json.error === "string" && json.error.trim()) ? json.error : `HTTP ${res.status}`
+      throw new Error(msg)
+    }
+    return json.task
+  }
 
   const send = async () => {
     if (!canSend) return
@@ -121,7 +198,6 @@ export default function AssistantPage() {
 
     setSending(true)
     setLastResult(null)
-    const parsedNow = parseInput(text.trim()).parsed
     try {
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
@@ -130,6 +206,29 @@ export default function AssistantPage() {
         return
       }
 
+      const cmd = parseCommand(text)
+      if (cmd.kind === "add_task") {
+        const optimistic: TaskRow = {
+          id: `tmp_${Math.random().toString(16).slice(2)}`,
+          title: cmd.title,
+          due_date: cmd.due_date,
+          status: "open",
+          created_at: new Date().toISOString(),
+        }
+        setTasks((prev) => [optimistic, ...(prev ?? [])].slice(0, 20))
+
+        const created = await executeAddTask(cmd, token)
+        setTasks((prev) => {
+          const next = (prev ?? []).filter((t) => t.id !== optimistic.id)
+          return [created, ...next].slice(0, 20)
+        })
+        toast({ title: "Task added", variant: "success" })
+        setText("")
+        await loadTasks()
+        return
+      }
+
+      const parsedNow = parseInput(text.trim()).parsed
       const res = await fetch("/api/assistant", {
         method: "POST",
         headers: {
@@ -170,10 +269,10 @@ export default function AssistantPage() {
     } catch (err: unknown) {
       console.error("[assistant] send failed", err)
       const raw = err instanceof Error ? err.message : "Unexpected error"
-      const friendly = humanizeError(raw)
+      const friendly = humanizeError(raw) === "Something went wrong. Please try again." ? raw : humanizeError(raw)
       const needsRlsHint = raw.toLowerCase().includes("row level security") || raw.toLowerCase().includes("rls")
       const extra = needsRlsHint ? " This looks like an RLS policy issue—check your `subscriptions` policies." : ""
-      toast({ title: "Couldn’t save", description: `${friendly} See console for details.${extra}`, variant: "error" })
+      toast({ title: "Couldn’t save", description: `Couldn’t save: ${friendly}.${extra}`, variant: "error" })
     } finally {
       setSending(false)
     }
@@ -296,12 +395,39 @@ export default function AssistantPage() {
           <div className="p-6 sm:p-8">
             <div className="flex items-baseline justify-between gap-3">
               <div className="text-sm font-semibold text-foreground/90">Activity</div>
-              <Button type="button" variant="outline" size="sm" onClick={loadEvents} disabled={sending}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await loadEvents()
+                  await loadTasks()
+                }}
+                disabled={sending}
+              >
                 Refresh
               </Button>
             </div>
 
             <div className="mt-4 space-y-3">
+              {tasks && tasks.length > 0 ? (
+                <div className="space-y-3">
+                  {tasks.slice(0, 10).map((t) => (
+                    <div key={t.id} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-foreground/90 truncate">{t.title}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {t.due_date ? `Due ${t.due_date}` : "No due date"} •{" "}
+                            {new Date(t.created_at).toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground shrink-0">task</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {activity ? (
                 activity.length === 0 ? (
                   <div className="text-sm text-muted-foreground">No activity yet.</div>
