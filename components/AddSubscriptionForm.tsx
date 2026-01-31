@@ -201,7 +201,7 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
       plan: match.name,
       period: match.period,
       price: match.price > 0 ? formatPriceDollars(match.price) : "",
-      category: !dirty.category && selectedService?.category ? selectedService.category : prev.category,
+      category: !dirty.category ? match.category ?? selectedService?.category ?? prev.category : prev.category,
     }))
     setSelectedPlanKey(key)
     setDirty((d) => ({ ...d, price: false, period: false, plan: false }))
@@ -293,16 +293,32 @@ export default function AddSubscriptionForm({ onSuccess, defaultOpen = false }: 
         })
       )
 
-      // Reset form
+      // Reset form (keep Service selection; clear non-locked overrides).
+      const keptServiceName = formData.serviceName.trim()
+      const svc =
+        keptServiceName
+          ? subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === keptServiceName.toLowerCase())
+          : undefined
+      const svcPlans = svc?.plans ?? []
+      const selectedFromKey =
+        svc && selectedPlanKey ? svcPlans.find((p) => planKey(p) === selectedPlanKey) : undefined
+      const preferred =
+        selectedFromKey ??
+        (svc?.defaultPlanName
+          ? svcPlans.find((p) => p.name === svc.defaultPlanName) ??
+            svcPlans.find((p) => p.name.toLowerCase() === svc.defaultPlanName!.toLowerCase())
+          : undefined) ??
+        svcPlans[0]
+
       setFormData({
-        serviceName: "",
-        plan: "",
-        price: "",
-        period: "monthly",
-        category: "",
+        serviceName: keptServiceName,
+        plan: preferred?.name ?? "",
+        price: preferred && preferred.price > 0 ? formatPriceDollars(preferred.price) : "",
+        period: preferred?.period ?? "monthly",
+        category: (preferred?.category ?? svc?.category ?? "").trim(),
       })
       setServiceQuery("")
-      setSelectedPlanKey("")
+      setSelectedPlanKey(preferred ? planKey(preferred) : "")
       setDirty({ price: false, period: false, plan: false, category: false })
       setErrors({})
       setTouched({ service: false, price: false })

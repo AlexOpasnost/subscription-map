@@ -4,7 +4,7 @@ export type Period = "monthly" | "yearly"
  * Catalog types requested by the product spec.
  * - `price` is in USD (dollars), not cents.
  */
-export type CatalogPlan = {
+export type Plan = {
   name: string
   price: number
   period: Period
@@ -12,24 +12,26 @@ export type CatalogPlan = {
   note?: string
 }
 
-export type CatalogService = {
+export type ServiceCatalogEntry = {
   id: string
   name: string
   category?: string
-  plans: CatalogPlan[] // 2–5
+  plans: Plan[] // 2–5
   logo?: string
   cancelUrl?: string
   defaultPlanName?: string
 }
 
 // Backwards-compatible aliases (older components used these names).
-export type Plan = CatalogPlan
-export type ServiceCatalogItem = CatalogService
+export type CatalogPlan = Plan
+export type CatalogService = ServiceCatalogEntry
+// Backwards-compatible aliases (older components used these names).
+export type ServiceCatalogItem = ServiceCatalogEntry
 
 const PRICE_NOTE = "Price varies by region."
-const CUSTOM_PLAN: CatalogPlan = { name: "Custom", price: 0, period: "monthly", note: "Set your own price" }
+const CUSTOM_PLAN: Plan = { name: "Custom", price: 0, period: "monthly", note: "Set your own price" }
 
-export const subscriptionCatalog: CatalogService[] = [
+export const subscriptionCatalog: ServiceCatalogEntry[] = [
   {
     id: "netflix",
     name: "Netflix",
