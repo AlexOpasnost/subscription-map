@@ -5,7 +5,11 @@ type TaskRow = {
   id: string
   user_id: string
   title: string
+  due_at?: string | null
   due_date: string | null
+  category?: string
+  amount_cents?: number | null
+  currency?: string
   status: string
   created_at: string
 }
@@ -30,6 +34,11 @@ function isIsoDateOnly(s: string): boolean {
   return Number.isFinite(dt.getTime())
 }
 
+function isIsoDateTime(s: string): boolean {
+  const dt = new Date(s)
+  return Number.isFinite(dt.getTime())
+}
+
 export async function POST(req: NextRequest) {
   const token = getBearerToken(req)
   if (!token) {
@@ -51,6 +60,20 @@ export async function POST(req: NextRequest) {
       : typeof dueDateRaw === "string"
         ? dueDateRaw.trim()
         : ""
+  const dueAtRaw = (body as any)?.due_at
+  const due_at =
+    dueAtRaw === null || typeof dueAtRaw === "undefined"
+      ? null
+      : typeof dueAtRaw === "string"
+        ? dueAtRaw.trim()
+        : ""
+  const category = typeof (body as any)?.category === "string" ? String((body as any).category).trim() : ""
+  const amountCentsRaw = (body as any)?.amount_cents
+  const amount_cents =
+    typeof amountCentsRaw === "number" && Number.isFinite(amountCentsRaw) && amountCentsRaw > 0
+      ? Math.floor(amountCentsRaw)
+      : null
+  const currency = typeof (body as any)?.currency === "string" ? String((body as any).currency).trim().toUpperCase() : ""
 
   if (!title) {
     return NextResponse.json({ ok: false, error: "Missing title" }, { status: 400 })
@@ -60,6 +83,9 @@ export async function POST(req: NextRequest) {
   }
   if (due_date && !isIsoDateOnly(due_date)) {
     return NextResponse.json({ ok: false, error: "Invalid due_date. Use YYYY-MM-DD." }, { status: 400 })
+  }
+  if (due_at && !isIsoDateTime(due_at)) {
+    return NextResponse.json({ ok: false, error: "Invalid due_at. Use an ISO timestamp." }, { status: 400 })
   }
 
   const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
@@ -88,9 +114,13 @@ export async function POST(req: NextRequest) {
       user_id: user.id,
       title,
       due_date,
+      due_at: due_at || null,
+      category: category ? category.slice(0, 30) : "general",
+      amount_cents,
+      currency: currency ? currency.slice(0, 8) : "USD",
       status: "open",
     })
-    .select("id,user_id,title,due_date,status,created_at")
+    .select("id,user_id,title,due_at,due_date,category,amount_cents,currency,status,created_at")
     .single()
 
   if (insertError) {

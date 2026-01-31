@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Bot, List, LogOut, Map, Plug } from "lucide-react"
+import { Bot, CalendarDays, List, LogOut, Map, Plug } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import BrandLink from "@/components/BrandLink"
@@ -9,7 +9,7 @@ import BrandLink from "@/components/BrandLink"
 type AppHeaderProps = {
   title: string
   onSignOut: () => void
-  currentPage?: "subscriptions" | "map" | "detail" | "assistant" | "integrations"
+  currentPage?: "subscriptions" | "map" | "timeline" | "detail" | "assistant" | "integrations"
 }
 
 export default function AppHeader({ title, onSignOut, currentPage = "subscriptions" }: AppHeaderProps) {
@@ -36,6 +36,14 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
             <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="Assistant">
               <Link href="/assistant">
                 <Bot className="h-4 w-4" />
+              </Link>
+            </Button>
+          ) : null}
+
+          {currentPage !== "timeline" ? (
+            <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="Timeline">
+              <Link href="/app/timeline">
+                <CalendarDays className="h-4 w-4" />
               </Link>
             </Button>
           ) : null}

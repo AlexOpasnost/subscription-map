@@ -16,15 +16,20 @@ import AppHeader from "@/components/AppHeader"
 import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { useToast } from "@/components/ToastProvider"
 import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
-import { humanizeError } from "@/lib/humanizeError"
 
 type AssistantApiResponse =
-  | { kind: "action" | "query"; message: string; data?: unknown; preview?: unknown; sync?: { enqueued: number } }
-  | { kind: "error"; message: string; details?: unknown; preview?: unknown }
+  | { ok: true; stage: "preview" | "executed"; message: string; intent: unknown; preview: unknown; result?: unknown; sync?: { enqueued: number } }
+  | { ok: false; error: string; stage?: "preview" | "executed"; intent?: unknown; preview?: unknown; details?: unknown }
 
 type AssistantEventRow = {
   id: string
@@ -82,29 +87,6 @@ function isUpcomingRenewalsResult(v: unknown): v is UpcomingRenewalsResult {
   return true
 }
 
-type ParsedCommand =
-  | { kind: "add_task"; title: string; due_date: string | null }
-  | { kind: "unsupported" }
-
-function isIsoDateOnly(input: string): boolean {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.trim())
-  if (!m) return false
-  const dt = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00Z`)
-  return Number.isFinite(dt.getTime())
-}
-
-function parseCommand(input: string): ParsedCommand {
-  const raw = input.trim()
-  if (!raw) return { kind: "unsupported" }
-  const m = /^add\s+task\s+(.+?)(?:\s+due\s+(\d{4}-\d{2}-\d{2}))?\s*$/i.exec(raw)
-  if (!m) return { kind: "unsupported" }
-  const title = (m[1] ?? "").trim()
-  const due = (m[2] ?? "").trim()
-  if (!title) return { kind: "unsupported" }
-  if (due && !isIsoDateOnly(due)) return { kind: "unsupported" }
-  return { kind: "add_task", title, due_date: due || null }
-}
-
 export default function AssistantPage() {
   const { user, signOut } = useAuth()
   const { toast } = useToast()
@@ -114,6 +96,11 @@ export default function AssistantPage() {
   const [activity, setActivity] = useState<AssistantActivityRow[] | null>(null)
   const [tasks, setTasks] = useState<TaskRow[] | null>(null)
   const [lastResult, setLastResult] = useState<AssistantApiResponse | null>(null)
+  const [pendingPreview, setPendingPreview] = useState<{
+    commandText: string
+    intent: unknown
+    preview: unknown
+  } | null>(null)
 
   const canSend = useMemo(() => text.trim().length > 0 && !sending, [text, sending])
   const livePreview = useMemo(() => {
@@ -178,20 +165,6 @@ export default function AssistantPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
 
-  const executeAddTask = async (cmd: { title: string; due_date: string | null }, token: string): Promise<TaskRow> => {
-    const res = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ title: cmd.title, due_date: cmd.due_date }),
-    })
-    const json = (await res.json()) as { ok: boolean; task?: TaskRow; error?: string }
-    if (!res.ok || !json.ok || !json.task) {
-      const msg = (json && typeof json.error === "string" && json.error.trim()) ? json.error : `HTTP ${res.status}`
-      throw new Error(msg)
-    }
-    return json.task
-  }
-
   const send = async () => {
     if (!canSend) return
     if (!user) return
@@ -206,82 +179,86 @@ export default function AssistantPage() {
         return
       }
 
-      const cmd = parseCommand(text)
-      if (cmd.kind === "add_task") {
-        const optimistic: TaskRow = {
-          id: `tmp_${Math.random().toString(16).slice(2)}`,
-          title: cmd.title,
-          due_date: cmd.due_date,
-          status: "open",
-          created_at: new Date().toISOString(),
-        }
-        setTasks((prev) => [optimistic, ...(prev ?? [])].slice(0, 20))
-
-        const created = await executeAddTask(cmd, token)
-        setTasks((prev) => {
-          const next = (prev ?? []).filter((t) => t.id !== optimistic.id)
-          return [created, ...next].slice(0, 20)
-        })
-        toast({ title: "Task added", variant: "success" })
-        setText("")
-        await loadTasks()
-        return
-      }
-
-      const parsedNow = parseInput(text.trim()).parsed
-      const res = await fetch("/api/assistant", {
+      const res = await fetch("/api/assistant?mode=preview", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ command: text, userId: user.id }),
+        body: JSON.stringify({ text }),
       })
 
       const json = (await res.json()) as AssistantApiResponse
       setLastResult(json)
 
-      if (!res.ok || json.kind === "error") {
-        console.error("[assistant] save failed", { status: res.status, json })
-        const raw = typeof json.message === "string" && json.message.trim() ? json.message.trim() : "Couldn’t save."
-        // Assistant errors are already curated server-side; show them as-is for clarity.
-        const needsRlsHint = raw.toLowerCase().includes("row level security") || raw.toLowerCase().includes("rls")
-        const extra = needsRlsHint ? " This looks like an RLS policy issue—check your `subscriptions` policies." : ""
-        toast({
-          title: "Couldn’t save",
-          description: `${raw}${extra}`,
-          variant: "error",
-        })
+      if (!res.ok || !json.ok) {
+        console.error("[assistant] preview failed", { status: res.status, json })
+        const raw = !json.ok && typeof json.error === "string" && json.error.trim() ? json.error.trim() : `HTTP ${res.status}`
+        toast({ title: "Couldn’t preview", description: raw, variant: "error" })
+        return
+      }
+
+      setPendingPreview({ commandText: text, intent: json.intent, preview: json.preview })
+    } catch (err: unknown) {
+      console.error("[assistant] preview request failed", err)
+      const raw = err instanceof Error ? err.message : "Network error"
+      toast({ title: "Couldn’t preview", description: raw, variant: "error" })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const confirmExecute = async () => {
+    if (!pendingPreview) return
+    if (!user) return
+    setSending(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
+        return
+      }
+
+      const res = await fetch("/api/assistant?mode=execute", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ text: pendingPreview.commandText }),
+      })
+
+      const json = (await res.json()) as AssistantApiResponse
+      setLastResult(json)
+
+      if (!res.ok || !json.ok) {
+        console.error("[assistant] execute failed", { status: res.status, json })
+        const raw = !json.ok && typeof json.error === "string" && json.error.trim() ? json.error.trim() : `HTTP ${res.status}`
+        toast({ title: "Couldn’t save", description: raw, variant: "error" })
         return
       }
 
       const enqueued = typeof json.sync?.enqueued === "number" ? json.sync.enqueued : 0
       const suffix = enqueued > 0 ? ` (Sync queued for ${enqueued})` : ""
-      const isAddSubscription =
-        parsedNow.kind === "action" && "action" in parsedNow && parsedNow.action === "add_subscription"
-      toast({
-        title: isAddSubscription ? "Subscription added" : "Saved",
-        description: `${json.message}${suffix}`,
-        variant: "success",
-      })
+      toast({ title: "Saved", description: `${json.message}${suffix}`, variant: "success" })
       setText("")
+      setPendingPreview(null)
       await loadEvents()
+      await loadTasks()
     } catch (err: unknown) {
-      console.error("[assistant] send failed", err)
-      const raw = err instanceof Error ? err.message : "Unexpected error"
-      const friendly = humanizeError(raw) === "Something went wrong. Please try again." ? raw : humanizeError(raw)
-      const needsRlsHint = raw.toLowerCase().includes("row level security") || raw.toLowerCase().includes("rls")
-      const extra = needsRlsHint ? " This looks like an RLS policy issue—check your `subscriptions` policies." : ""
-      toast({ title: "Couldn’t save", description: `Couldn’t save: ${friendly}.${extra}`, variant: "error" })
+      console.error("[assistant] execute request failed", err)
+      const raw = err instanceof Error ? err.message : "Network error"
+      toast({ title: "Couldn’t save", description: raw, variant: "error" })
     } finally {
       setSending(false)
     }
   }
 
   const renderResult = () => {
-    if (!lastResult || lastResult.kind === "error") return null
-    if (lastResult.kind === "query") {
-      const data = lastResult.data
+    if (!lastResult || !lastResult.ok) return null
+    if (lastResult.stage !== "executed") return null
+    const data = lastResult.result
       if (isSpendingResult(data)) {
         return (
           <GlassSurface variant="subtle" className="p-0">
@@ -340,7 +317,6 @@ export default function AssistantPage() {
           </GlassSurface>
         )
       }
-    }
     return null
   }
 
@@ -357,7 +333,7 @@ export default function AssistantPage() {
             </div>
 
             <div className="mt-4 space-y-3">
-              {livePreview ? (
+              {!pendingPreview && livePreview ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <div className="text-xs text-muted-foreground">Preview</div>
                   <div className="mt-1 text-sm font-medium text-foreground/90">{livePreview.title}</div>
@@ -365,27 +341,95 @@ export default function AssistantPage() {
                 </div>
               ) : null}
 
+              {pendingPreview ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="text-xs text-muted-foreground">Preview</div>
+                  <div className="mt-1 text-sm font-medium text-foreground/90">
+                    {isRecord(pendingPreview.preview) && typeof (pendingPreview.preview as any).title === "string"
+                      ? String((pendingPreview.preview as any).title)
+                      : "Preview"}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {isRecord(pendingPreview.preview) && typeof (pendingPreview.preview as any).summary === "string"
+                      ? String((pendingPreview.preview as any).summary)
+                      : "Review and confirm."}
+                  </div>
+                  <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                    <Button type="button" variant="primary" className="h-10" onClick={confirmExecute} disabled={sending} loading={sending} loadingText="Saving…">
+                      Confirm
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10"
+                      onClick={() => setPendingPreview(null)}
+                      disabled={sending}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-10"
+                      onClick={() => {
+                        setPendingPreview(null)
+                        setLastResult(null)
+                        setText("")
+                      }}
+                      disabled={sending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
               <Textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="What do you want to do?"
-                disabled={sending}
+                disabled={sending || !!pendingPreview}
                 className="min-h-[110px]"
               />
               <div className="flex items-center justify-end">
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="h-11 px-5 text-[15px] font-semibold tracking-tight"
-                  onClick={send}
-                  disabled={!canSend}
-                  loading={sending}
-                  loadingText="Saving…"
-                >
-                  Send
-                </Button>
+                {!pendingPreview ? (
+                  <Button
+                    type="button"
+                    variant="primary"
+                    className="h-11 px-5 text-[15px] font-semibold tracking-tight"
+                    onClick={send}
+                    disabled={!canSend}
+                    loading={sending}
+                    loadingText="Previewing…"
+                  >
+                    Send
+                  </Button>
+                ) : null}
               </div>
             </div>
+          </div>
+        </GlassSurface>
+
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="p-6 sm:p-8">
+            <Accordion type="single" collapsible className="w-full">
+              <AccordionItem value="examples" className="border-none">
+                <AccordionTrigger className="hover:no-underline text-sm font-semibold text-foreground/90">
+                  Supported examples
+                </AccordionTrigger>
+                <AccordionContent>
+                  <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
+                    <div>add subscription Spotify Duo $14.99 monthly</div>
+                    <div>add task Tax payment due 2026-04-30 amount $1200</div>
+                    <div>add birthday Mom 2000-05-12 remind 7 days before</div>
+                    <div>remind me to cancel Netflix on the 21st</div>
+                    <div>remind me to cancel Netflix 3 days before renewal</div>
+                    <div>what am i spending monthly?</div>
+                    <div>what's due this week?</div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </div>
         </GlassSurface>
 
