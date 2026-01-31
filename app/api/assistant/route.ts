@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js"
 
 import type { AddPlanArgs, AddSubscriptionArgs, AddTaskArgs, Period } from "@/lib/assistant/parse"
 import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
+import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
 import { toCents } from "@/lib/toCents"
@@ -106,6 +107,16 @@ function toUserSafeAssistantError(raw: string): string {
   }
 
   return msg
+}
+
+function pickDefaultPlanForService(service: string): string | null {
+  const key = service.trim().toLowerCase()
+  if (!key) return null
+  const entry = subscriptionCatalog.find((s) => s.name.trim().toLowerCase() === key)
+  if (!entry) return null
+  if (entry.defaultPlanName && entry.defaultPlanName.trim()) return entry.defaultPlanName.trim()
+  const first = entry.plans?.[0]?.name
+  return typeof first === "string" && first.trim() ? first.trim() : null
 }
 
 export async function POST(req: NextRequest) {
@@ -289,9 +300,18 @@ export async function POST(req: NextRequest) {
       const category = typeof args?.category === "string" && args.category.trim() ? args.category.trim() : "Other"
       const reminderDays = typeof args?.remindDays === "number" && args.remindDays > 0 ? Math.floor(args.remindDays) : null
       const renewalDate = typeof args?.renewDate === "string" ? toIsoDateOnly(args.renewDate) : null
-      const plan = typeof args?.plan === "string" && args.plan.trim() ? args.plan.trim() : null
+      const parsedPlan = typeof args?.plan === "string" ? args.plan.trim() : ""
+      const fallbackPlan = pickDefaultPlanForService(service) ?? "Standard"
+      const finalPlan = (parsedPlan || fallbackPlan).trim()
+      if (!finalPlan) {
+        const msg = "Plan is required."
+        await logEvent("error", msg)
+        return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
+      }
 
-      const payloadForInsert = { service, plan, priceCents, period, category, reminderDays, renewalDate }
+      // NOTE: some deployments enforce `subscriptions.plan NOT NULL`.
+      // Always send a non-null, non-empty plan string.
+      const payloadForInsert = { service, plan: finalPlan, priceCents, period, category, reminderDays, renewalDate }
       let created: Awaited<ReturnType<typeof createSubscription>>
       try {
         created = await createSubscription(payloadForInsert, { accessToken: token })
