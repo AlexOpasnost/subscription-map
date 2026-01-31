@@ -243,13 +243,13 @@ export default function AssistantPage() {
 
       if (!res.ok || json.kind === "error") {
         console.error("[assistant] save failed", { status: res.status, json })
-        const raw = json.message ?? "Unexpected error"
-        const friendly = humanizeError(raw)
+        const raw = typeof json.message === "string" && json.message.trim() ? json.message.trim() : "Couldn’t save."
+        // Assistant errors are already curated server-side; show them as-is for clarity.
         const needsRlsHint = raw.toLowerCase().includes("row level security") || raw.toLowerCase().includes("rls")
         const extra = needsRlsHint ? " This looks like an RLS policy issue—check your `subscriptions` policies." : ""
         toast({
           title: "Couldn’t save",
-          description: `${friendly} See console for details.${extra}`,
+          description: `${raw}${extra}`,
           variant: "error",
         })
         return

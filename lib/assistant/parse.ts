@@ -1,3 +1,5 @@
+import { toCents } from "@/lib/toCents"
+
 export type Period = "monthly" | "yearly"
 
 export type AssistantEventParsed =
@@ -36,12 +38,11 @@ export type AssistantPreview =
   | { kind: "unknown"; title: string; summary: string }
 
 function parseCurrencyToCents(input: string): number | null {
-  const s = input.trim().replace(/^\$/, "")
-  if (!s) return null
-  const n = Number(s)
-  if (!Number.isFinite(n)) return null
-  if (n <= 0) return null
-  return Math.round(n * 100)
+  try {
+    return toCents(input)
+  } catch {
+    return null
+  }
 }
 
 function toIsoDateOnly(input: string): string | null {

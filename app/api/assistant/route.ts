@@ -5,6 +5,7 @@ import type { AddPlanArgs, AddSubscriptionArgs, AddTaskArgs, Period } from "@/li
 import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
+import { toCents } from "@/lib/toCents"
 
 type AssistantOkResponse = {
   kind: "action" | "query"
@@ -65,6 +66,46 @@ function extractErrorMessage(err: unknown): string {
     if (typeof msg === "string") return msg
   }
   return ""
+}
+
+function extractErrorDetails(err: unknown): Record<string, unknown> | null {
+  if (!err || typeof err !== "object") return null
+  const anyErr = err as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const k of ["name", "code", "details", "hint", "message"]) {
+    if (k in anyErr) out[k] = anyErr[k]
+  }
+  return Object.keys(out).length ? out : null
+}
+
+function normalizePriceCents(input: unknown): number {
+  if (typeof input === "number") {
+    // If a float slips through (e.g. 14.99), interpret as dollars.
+    if (!Number.isFinite(input)) throw new Error("Invalid price. Try: 14.99")
+    if (Number.isInteger(input)) return input
+    return toCents(input)
+  }
+  if (typeof input === "string") return toCents(input)
+  throw new Error("Invalid price. Try: 14.99")
+}
+
+function toUserSafeAssistantError(raw: string): string {
+  const msg = raw.trim()
+  const lower = msg.toLowerCase()
+
+  // Keep assistant errors user-safe and actionable (the UI will show these verbatim).
+  if (!msg) return "Something went wrong. Please try again."
+  if (lower.includes("invalid price")) return "Invalid price. Try: 14.99"
+  if (lower.includes("price must be greater than 0")) return "Invalid price. Try: 14.99"
+  if (lower.includes("invalid input syntax") && lower.includes("integer")) return "Invalid price. Try: 14.99"
+  if (lower.includes("period") && (lower.includes("check constraint") || lower.includes("violates"))) {
+    return "Invalid period. Use monthly or yearly."
+  }
+  if (lower.includes("row level security") || lower.includes("rls") || lower.includes("permission denied")) {
+    return "You don’t have access to do that."
+  }
+
+  return msg
 }
 
 export async function POST(req: NextRequest) {
@@ -225,34 +266,47 @@ export async function POST(req: NextRequest) {
     }
 
     if (parsed.kind === "action" && "action" in parsed && parsed.action === "add_subscription") {
-      const args = parsed.args as AddSubscriptionArgs
-      if (!args?.service || typeof args.service !== "string" || !args.service.trim()) {
+      const args = parsed.args as Partial<AddSubscriptionArgs> & Record<string, unknown>
+      const service = typeof args?.service === "string" ? args.service.trim() : ""
+      if (!service) {
         const msg = "Missing service name."
         await logEvent("error", msg)
         return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
       }
-      if (!args?.priceCents || args.priceCents <= 0) {
-        const msg = "Missing or invalid price."
+
+      let priceCents: number
+      try {
+        // Prefer the parser’s `priceCents` (expected int), but accept a raw `price` too.
+        const raw = (args as { priceCents?: unknown; price?: unknown }).priceCents ?? (args as { price?: unknown }).price
+        priceCents = normalizePriceCents(raw)
+      } catch (err: unknown) {
+        const msg = extractErrorMessage(err) || "Missing or invalid price. Try: 14.99"
         await logEvent("error", msg)
         return NextResponse.json<AssistantResponse>({ kind: "error", message: msg }, { status: 400 })
       }
-      const period = args.period === "yearly" ? "yearly" : "monthly"
-      const category = typeof args.category === "string" && args.category.trim() ? args.category.trim() : "Other"
-      const reminderDays = typeof args.remindDays === "number" && args.remindDays > 0 ? Math.floor(args.remindDays) : null
-      const renewalDate = typeof args.renewDate === "string" ? toIsoDateOnly(args.renewDate) : null
 
-      const created = await createSubscription(
-        {
-          service: args.service.trim(),
-          plan: typeof args.plan === "string" && args.plan.trim() ? args.plan.trim() : null,
-          priceCents: args.priceCents,
-          period,
-          category,
-          reminderDays,
-          renewalDate,
-        },
-        { accessToken: token }
-      )
+      const period: Period = args?.period === "yearly" || args?.period === "monthly" ? args.period : "monthly"
+      const category = typeof args?.category === "string" && args.category.trim() ? args.category.trim() : "Other"
+      const reminderDays = typeof args?.remindDays === "number" && args.remindDays > 0 ? Math.floor(args.remindDays) : null
+      const renewalDate = typeof args?.renewDate === "string" ? toIsoDateOnly(args.renewDate) : null
+      const plan = typeof args?.plan === "string" && args.plan.trim() ? args.plan.trim() : null
+
+      const payloadForInsert = { service, plan, priceCents, period, category, reminderDays, renewalDate }
+      let created: Awaited<ReturnType<typeof createSubscription>>
+      try {
+        created = await createSubscription(payloadForInsert, { accessToken: token })
+      } catch (err: unknown) {
+        const rawMsg = extractErrorMessage(err) || "Couldn’t create subscription."
+        const msg = toUserSafeAssistantError(rawMsg)
+        console.error("[assistant] add_subscription failed", {
+          userId,
+          payload: payloadForInsert,
+          error: extractErrorDetails(err) ?? rawMsg,
+        })
+        await logEvent("error", msg)
+        await logActivity("error", { message: msg, parsed, preview })
+        return NextResponse.json<AssistantResponse>({ kind: "error", message: msg, parsed, preview }, { status: 400 })
+      }
       const sync = await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
       await logEvent("ok")
       const planLabel = created.plan ? ` (${created.plan})` : ""
