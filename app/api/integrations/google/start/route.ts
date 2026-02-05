@@ -12,6 +12,60 @@ function getBearerToken(req: NextRequest): string | null {
   return m ? m[1].trim() : null
 }
 
+function getUserIdFromQuery(req: NextRequest): string | null {
+  const u = new URL(req.url)
+  const userId = u.searchParams.get("user_id")?.trim() ?? ""
+  return userId ? userId : null
+}
+
+function buildGoogleOauthUrl(input: { userId: string; redirectUri: string; clientId: string }) {
+  const exp = Math.floor(Date.now() / 1000) + 10 * 60
+  const state = signIntegrationState({ userId: input.userId, provider: "google", exp })
+  const scope = ["https://www.googleapis.com/auth/calendar.events"].join(" ")
+
+  const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
+  url.searchParams.set("client_id", input.clientId)
+  url.searchParams.set("redirect_uri", input.redirectUri)
+  url.searchParams.set("response_type", "code")
+  url.searchParams.set("scope", scope)
+  url.searchParams.set("access_type", "offline")
+  url.searchParams.set("prompt", "consent")
+  url.searchParams.set("include_granted_scopes", "true")
+  url.searchParams.set("state", state)
+  return url
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const userId = getUserIdFromQuery(req)
+    if (!userId) return NextResponse.json({ error: "Missing user_id" }, { status: 400 })
+
+    const appOrigin = (() => {
+      try {
+        // Best-effort: APP_URL -> NEXT_PUBLIC_APP_URL -> VERCEL_URL -> localhost.
+        return getAppOrigin({ required: false })
+      } catch {
+        return req.nextUrl.origin
+      }
+    })()
+
+    const redirectUri = `${appOrigin}/api/integrations/google/callback`
+    const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
+    const url = buildGoogleOauthUrl({ userId, redirectUri, clientId })
+    return NextResponse.redirect(url.toString())
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Couldn’t start Google OAuth"
+    return NextResponse.json(
+      {
+        error: message,
+        hint:
+          "Check env vars: APP_URL (recommended), NEXT_PUBLIC_APP_URL (optional), GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.",
+      },
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const token = getBearerToken(req)
@@ -29,23 +83,7 @@ export async function POST(req: NextRequest) {
 
     const redirectUri = `${appOrigin}/api/integrations/google/callback`
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
-
-    const exp = Math.floor(Date.now() / 1000) + 10 * 60
-    const state = signIntegrationState({ userId, provider: "google", exp })
-
-    const scope = [
-      "https://www.googleapis.com/auth/calendar.events",
-    ].join(" ")
-
-    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
-    url.searchParams.set("client_id", clientId)
-    url.searchParams.set("redirect_uri", redirectUri)
-    url.searchParams.set("response_type", "code")
-    url.searchParams.set("scope", scope)
-    url.searchParams.set("access_type", "offline")
-    url.searchParams.set("prompt", "consent")
-    url.searchParams.set("include_granted_scopes", "true")
-    url.searchParams.set("state", state)
+    const url = buildGoogleOauthUrl({ userId, redirectUri, clientId })
 
     return NextResponse.json({ url: url.toString() })
   } catch (err: unknown) {

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
+
 type TaskRow = {
   id: string
   user_id: string
@@ -128,6 +130,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: insertError.message, details: insertError }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true, task: created as TaskRow })
+  const sync = await enqueueSyncJobs(supabase, { userId: user.id, action: "upsert", targetType: "task", targetId: created.id })
+  return NextResponse.json({ ok: true, task: created as TaskRow, sync })
 }
 

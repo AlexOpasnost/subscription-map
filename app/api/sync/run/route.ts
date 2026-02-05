@@ -4,6 +4,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { pushToGoogleCalendar } from "@/lib/sync/providers/googleCalendar"
 import { pushToNotion } from "@/lib/sync/providers/notion"
 import type { IntegrationRow, Provider, SyncAction, SyncJobRow } from "@/lib/sync/types"
+import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 
 function getBearerToken(req: NextRequest): string | null {
   const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
@@ -28,14 +29,7 @@ function parseProvider(v: unknown): Provider | null {
 }
 
 function parseAction(v: unknown): SyncAction | null {
-  return v === "push_task" || v === "push_plan" || v === "push_subscription" ? v : null
-}
-
-function getRecordId(payload: unknown): string | null {
-  if (typeof payload !== "object" || payload === null) return null
-  const p = payload as Record<string, unknown>
-  const id = p.record_id
-  return typeof id === "string" && id.trim() ? id.trim() : null
+  return v === "upsert" || v === "delete" ? v : null
 }
 
 async function processJob(
@@ -44,14 +38,15 @@ async function processJob(
 ): Promise<void> {
   const provider = parseProvider(job.provider)
   const action = parseAction(job.action)
-  const recordId = getRecordId(job.payload)
-  if (!provider || !action || !recordId) {
+  const targetType = typeof (job as any).target_type === "string" ? String((job as any).target_type) : ""
+  const targetId = typeof (job as any).target_id === "string" ? String((job as any).target_id) : ""
+  if (!provider || !action || !targetType || !targetId) {
     throw new Error("Invalid job payload")
   }
 
   const { data: integration, error: integrationError } = await supabase
     .from("integrations")
-    .select("id,user_id,provider,access_token,refresh_token,expires_at,meta,created_at")
+    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at")
     .eq("user_id", job.user_id)
     .eq("provider", provider)
     .maybeSingle()
@@ -63,15 +58,15 @@ async function processJob(
     await insertLog(supabase, job, message)
   }
 
-  await log(`Running ${provider}:${action} for record_id=${recordId}`)
+  await log(`Running ${provider}:${action} for ${targetType}:${targetId}`)
 
   if (provider === "google") {
-    await pushToGoogleCalendar(supabase, integration as IntegrationRow, { action, recordId, log })
+    await pushToGoogleCalendar(supabase, integration as IntegrationRow, { action, targetType, targetId, log })
     return
   }
 
   if (provider === "notion") {
-    await pushToNotion(supabase, integration as IntegrationRow, { action, recordId, log })
+    await pushToNotion(supabase, integration as IntegrationRow, { action, targetType, targetId, log })
     return
   }
 
@@ -82,9 +77,11 @@ async function processJob(
 async function claimJob(supabase: ReturnType<typeof getSupabaseAdmin>, jobId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from("sync_jobs")
-    .update({ status: "running", error: null })
+    // Keep spec column `status` as pending; use legacy_status as an internal lock.
+    .update({ legacy_status: "running", last_error: null })
     .eq("id", jobId)
-    .eq("status", "queued")
+    .eq("status", "pending")
+    .or("legacy_status.is.null,legacy_status.eq.queued")
     .select("id")
     .maybeSingle()
 
@@ -93,12 +90,12 @@ async function claimJob(supabase: ReturnType<typeof getSupabaseAdmin>, jobId: st
 }
 
 async function markOk(supabase: ReturnType<typeof getSupabaseAdmin>, jobId: string) {
-  const { error } = await supabase.from("sync_jobs").update({ status: "ok", error: null }).eq("id", jobId)
+  const { error } = await supabase.from("sync_jobs").update({ status: "ok", legacy_status: "ok", last_error: null }).eq("id", jobId)
   if (error) throw error
 }
 
 async function markError(supabase: ReturnType<typeof getSupabaseAdmin>, jobId: string, message: string) {
-  const { error } = await supabase.from("sync_jobs").update({ status: "error", error: message }).eq("id", jobId)
+  const { error } = await supabase.from("sync_jobs").update({ status: "error", legacy_status: "error", last_error: message }).eq("id", jobId)
   if (error) throw error
 }
 
@@ -108,18 +105,42 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const secret = process.env.SYNC_RUN_SECRET?.trim()
-  if (secret && !shouldAuthorizeCron(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+  const token = getBearerToken(req)
+  const cron = !!secret && shouldAuthorizeCron(req)
+  if (!cron && !token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const supabase = getSupabaseAdmin()
 
-  const { data: jobs, error } = await supabase
-    .from("sync_jobs")
-    .select("id,user_id,provider,action,payload,status,error,created_at,updated_at")
-    .eq("status", "queued")
-    .order("created_at", { ascending: true })
-    .limit(10)
+  let onlyUserId: string | null = null
+  if (!cron) {
+    try {
+      onlyUserId = await getUserIdFromAccessToken(token!)
+    } catch {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+  }
+
+  const baseSelect =
+    "id,user_id,provider,target_type,target_id,action,status,attempts,last_error,legacy_status,legacy_action,legacy_payload,created_at,updated_at"
+
+  const { data: jobs, error } = onlyUserId
+    ? await supabase
+        .from("sync_jobs")
+        .select(baseSelect)
+        .eq("user_id", onlyUserId)
+        .eq("status", "pending")
+        .lt("attempts", 10)
+        .or("legacy_status.is.null,legacy_status.eq.queued")
+        .order("created_at", { ascending: true })
+        .limit(10)
+    : await supabase
+        .from("sync_jobs")
+        .select(baseSelect)
+        .eq("status", "pending")
+        .lt("attempts", 10)
+        .or("legacy_status.is.null,legacy_status.eq.queued")
+        .order("created_at", { ascending: true })
+        .limit(10)
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -129,28 +150,37 @@ export async function POST(req: NextRequest) {
   let processed = 0
   let ok = 0
   let failed = 0
-  const results: Array<{ id: string; status: "skipped" | "ok" | "error"; error?: string }> = []
+  const results: Array<{
+    id: string
+    provider?: string
+    target_type?: string
+    target_id?: string
+    status: "skipped" | "ok" | "error"
+    error?: string
+  }> = []
 
   for (const job of queued) {
     const claimed = await claimJob(supabase, job.id)
     if (!claimed) {
-      results.push({ id: job.id, status: "skipped" })
+      results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "skipped" })
       continue
     }
     processed += 1
     try {
+      // Increment attempts early (best-effort) so retries are bounded even if execution crashes mid-flight.
+      await supabase.from("sync_jobs").update({ attempts: (job.attempts ?? 0) + 1 }).eq("id", job.id)
       await insertLog(supabase, job, "Started")
       await processJob(supabase, job)
       await insertLog(supabase, job, "Completed OK")
       await markOk(supabase, job.id)
       ok += 1
-      results.push({ id: job.id, status: "ok" })
+      results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "ok" })
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unexpected error"
+      const msg = err instanceof Error ? err.message : "Sync failed"
       await insertLog(supabase, job, `Error: ${msg}`)
       await markError(supabase, job.id, msg)
       failed += 1
-      results.push({ id: job.id, status: "error", error: msg })
+      results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "error", error: msg })
     }
   }
 

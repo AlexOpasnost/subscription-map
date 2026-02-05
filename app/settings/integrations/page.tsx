@@ -10,23 +10,13 @@ import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/components/ToastProvider"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { humanizeError } from "@/lib/humanizeError"
 
 type Provider = "google" | "notion"
-
-type IntegrationRow = {
-  provider: Provider
-  meta: unknown
-  created_at: string
-}
-
-type OAuthTokenRow = {
-  provider: Provider
-  created_at: string
-}
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -44,39 +34,42 @@ export default function IntegrationsPage() {
   const router = useRouter()
 
   const [loading, setLoading] = useState(true)
-  const [tokens, setTokens] = useState<OAuthTokenRow[]>([])
-  const [rows, setRows] = useState<IntegrationRow[]>([]) // meta/config (optional)
   const [busyProvider, setBusyProvider] = useState<Provider | null>(null)
+  const [notionToken, setNotionToken] = useState("")
   const [notionDatabaseId, setNotionDatabaseId] = useState("")
-  const [savingNotionDb, setSavingNotionDb] = useState(false)
+  const [savingNotion, setSavingNotion] = useState(false)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+  const [status, setStatus] = useState<{
+    connected: { google: boolean; notion: boolean }
+    settings: { tasks: boolean; subscriptions: boolean; birthdays: boolean }
+    notion: { databaseId: string }
+    lastSync: {
+      google: { status: string; last_error: string | null; updated_at: string } | null
+      notion: { status: string; last_error: string | null; updated_at: string } | null
+    }
+  } | null>(null)
 
   const providers = useMemo(() => {
-    const set = new Set(tokens.map((r) => r.provider))
     return {
-      google: set.has("google"),
-      notion: set.has("notion"),
+      google: !!status?.connected.google,
+      notion: !!status?.connected.notion,
     }
-  }, [tokens])
-
-  const notionRow = useMemo(() => rows.find((r) => r.provider === "notion") ?? null, [rows])
-  const notionDbIdFromMeta = useMemo(() => getMetaString(notionRow?.meta, "notion_database_id"), [notionRow?.meta])
+  }, [status?.connected.google, status?.connected.notion])
 
   const load = async () => {
     if (!user) return
     setLoading(true)
     try {
-      const [{ data: tokenData, error: tokenError }, { data: integrationData }] = await Promise.all([
-        supabase.from("oauth_tokens").select("provider,created_at").order("created_at", { ascending: false }),
-        // optional config/meta (used for Notion database id, etc.)
-        supabase.from("integrations").select("provider,meta,created_at").order("created_at", { ascending: false }),
-      ])
-      if (tokenError) throw tokenError
-      setTokens((tokenData ?? []) as OAuthTokenRow[])
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error("You’re signed out. Please sign in again.")
 
-      const list = ((integrationData ?? []) as IntegrationRow[]) ?? []
-      setRows(list)
-      const notion = list.find((r) => r.provider === "notion")
-      setNotionDatabaseId(getMetaString(notion?.meta, "notion_database_id"))
+      const res = await fetch("/api/integrations/status", { headers: { Authorization: `Bearer ${token}` } })
+      const json = (await res.json()) as any
+      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      setStatus(json)
+      setNotionDatabaseId(typeof json?.notion?.databaseId === "string" ? json.notion.databaseId : "")
     } catch (err: unknown) {
       const msg = humanizeError(err)
       toast({ title: "Couldn’t load integrations", description: msg, variant: "error" })
@@ -116,8 +109,13 @@ export default function IntegrationsPage() {
     if (busyProvider) return
     setBusyProvider(provider)
     try {
-      // Spec: start route takes user_id in query string and redirects to provider OAuth.
-      window.location.href = `/api/oauth/${provider}/start?user_id=${encodeURIComponent(user.id)}`
+      if (provider === "google") {
+        // Redirect to OAuth (GET).
+        window.location.href = `/api/integrations/google/start?user_id=${encodeURIComponent(user.id)}`
+        return
+      }
+      // Notion uses token+database connect below.
+      toast({ title: "Notion setup", description: "Paste your Notion token + database ID below.", variant: "success" })
     } catch (err: unknown) {
       toast({ title: "Couldn’t start OAuth", description: humanizeError(err), variant: "error" })
     } finally {
@@ -130,12 +128,17 @@ export default function IntegrationsPage() {
     if (busyProvider) return
     setBusyProvider(provider)
     try {
-      const [{ error: tokenError }, { error: integrationError }] = await Promise.all([
-        supabase.from("oauth_tokens").delete().eq("provider", provider),
-        supabase.from("integrations").delete().eq("provider", provider),
-      ])
-      if (tokenError) throw tokenError
-      if (integrationError) throw integrationError
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error("You’re signed out. Please sign in again.")
+
+      const res = await fetch("/api/integrations/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ provider }),
+      })
+      const json = (await res.json()) as any
+      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
       toast({ title: "Disconnected", variant: "success" })
       await load()
     } catch (err: unknown) {
@@ -145,26 +148,85 @@ export default function IntegrationsPage() {
     }
   }
 
-  const saveNotionDatabaseId = async () => {
+  const saveNotion = async () => {
     if (!user) return
-    if (savingNotionDb) return
+    if (savingNotion) return
     const dbId = notionDatabaseId.trim()
+    const tok = notionToken.trim()
+    if (!tok) {
+      toast({ title: "Notion token required", description: "Paste a Notion integration token.", variant: "error" })
+      return
+    }
     if (!dbId) {
       toast({ title: "Database ID required", description: "Paste a Notion database ID.", variant: "error" })
       return
     }
-    setSavingNotionDb(true)
+    setSavingNotion(true)
     try {
-      const meta = isRecord(notionRow?.meta) ? notionRow?.meta : {}
-      const nextMeta = { ...meta, notion_database_id: dbId }
-      const { error } = await supabase.from("integrations").update({ meta: nextMeta }).eq("provider", "notion")
-      if (error) throw error
-      toast({ title: "Saved", description: "Notion database ID saved.", variant: "success" })
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error("You’re signed out. Please sign in again.")
+
+      const res = await fetch("/api/integrations/notion/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ token: tok, databaseId: dbId }),
+      })
+      const json = (await res.json()) as any
+      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+
+      toast({ title: "Connected", description: "Notion settings saved.", variant: "success" })
+      setNotionToken("")
       await load()
     } catch (err: unknown) {
       toast({ title: "Couldn’t save Notion settings", description: humanizeError(err), variant: "error" })
     } finally {
-      setSavingNotionDb(false)
+      setSavingNotion(false)
+    }
+  }
+
+  const saveSyncSettings = async () => {
+    if (!user) return
+    if (settingsSaving) return
+    if (!status) return
+    setSettingsSaving(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error("You’re signed out. Please sign in again.")
+      const res = await fetch("/api/integrations/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ sync: status.settings }),
+      })
+      const json = (await res.json()) as any
+      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      toast({ title: "Saved", description: "Sync preferences updated.", variant: "success" })
+      await load()
+    } catch (err: unknown) {
+      toast({ title: "Couldn’t save preferences", description: humanizeError(err), variant: "error" })
+    } finally {
+      setSettingsSaving(false)
+    }
+  }
+
+  const retrySync = async () => {
+    if (!user) return
+    if (retrying) return
+    setRetrying(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) throw new Error("You’re signed out. Please sign in again.")
+      const res = await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+      const json = (await res.json()) as any
+      if (!res.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      toast({ title: "Sync run started", description: `Processed ${json.processed ?? 0} jobs.`, variant: "success" })
+      await load()
+    } catch (err: unknown) {
+      toast({ title: "Sync failed", description: humanizeError(err), variant: "error" })
+    } finally {
+      setRetrying(false)
     }
   }
 
@@ -180,6 +242,7 @@ export default function IntegrationsPage() {
     icon: React.ReactNode
   }) => {
     const connected = providers[provider]
+    const last = status?.lastSync?.[provider] ?? null
     return (
       <GlassSurface className="p-0">
         <div className="p-6 sm:p-8">
@@ -200,6 +263,13 @@ export default function IntegrationsPage() {
                   {connected ? "Connected" : "Not connected"}
                 </span>
               </div>
+              {last ? (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Last sync: <span className="text-foreground/80">{last.status}</span>{" "}
+                  <span className="opacity-70">({new Date(last.updated_at).toLocaleString()})</span>
+                  {last.last_error ? <div className="mt-1 text-destructive">{last.last_error}</div> : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="shrink-0">
@@ -227,42 +297,48 @@ export default function IntegrationsPage() {
             </div>
           </div>
 
-          {provider === "notion" && connected ? (
+          {provider === "notion" ? (
             <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-xl border border-white/10 bg-white/5 shrink-0">
                   <ShieldAlert className="h-3.5 w-3.5 text-foreground/80" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-foreground/90">Notion database</div>
+                  <div className="text-sm font-medium text-foreground/90">Notion database + token</div>
                   <div className="mt-1 text-xs text-muted-foreground leading-relaxed">
-                    To sync tasks/plans/subscriptions to Notion, paste a database ID. You can copy it from the database URL
-                    (the long string after your workspace and before <span className="font-mono">?v=</span>).
+                    Paste a Notion integration token and a database ID. The token is saved server-side and never returned to the client.
                   </div>
 
                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
                     <Input
+                      value={notionToken}
+                      onChange={(e) => setNotionToken(e.target.value)}
+                      placeholder="notion_token"
+                      type="password"
+                      disabled={savingNotion}
+                    />
+                    <Input
                       value={notionDatabaseId}
                       onChange={(e) => setNotionDatabaseId(e.target.value)}
                       placeholder="notion_database_id"
-                      disabled={savingNotionDb}
+                      disabled={savingNotion}
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      onClick={saveNotionDatabaseId}
-                      disabled={savingNotionDb || !notionDatabaseId.trim()}
+                      onClick={saveNotion}
+                      disabled={savingNotion || !notionDatabaseId.trim() || !notionToken.trim()}
                       className="h-10"
-                      loading={savingNotionDb}
-                      loadingText="Saving…"
+                      loading={savingNotion}
+                      loadingText="Validating…"
                     >
                       Save
                     </Button>
                   </div>
 
-                  {notionDbIdFromMeta ? (
+                  {status?.notion?.databaseId ? (
                     <div className="mt-2 text-xs text-muted-foreground">
-                      Current: <span className="font-mono">{notionDbIdFromMeta}</span>
+                      Current: <span className="font-mono">{status.notion.databaseId}</span>
                     </div>
                   ) : (
                     <div className="mt-2 text-xs text-muted-foreground">Not set yet.</div>
@@ -294,6 +370,65 @@ export default function IntegrationsPage() {
         </GlassSurface>
 
         <GlassSurface variant="subtle" className="p-0">
+          <div className="p-6 sm:p-8">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground/90">Sync preferences</div>
+                <div className="mt-1 text-xs text-muted-foreground">Applies to both Google and Notion (when connected).</div>
+              </div>
+              <div className="shrink-0 flex gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={retrySync} disabled={retrying || loading}>
+                  Retry sync
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  onClick={saveSyncSettings}
+                  disabled={settingsSaving || loading || !status}
+                  loading={settingsSaving}
+                  loadingText="Saving…"
+                >
+                  Save
+                </Button>
+              </div>
+            </div>
+
+            {status ? (
+              <div className="mt-4 grid gap-3">
+                {(
+                  [
+                    { key: "tasks", label: "Sync Tasks" },
+                    { key: "subscriptions", label: "Sync Subscriptions (renewals)" },
+                    { key: "birthdays", label: "Sync Birthdays" },
+                  ] as const
+                ).map((x) => (
+                  <div key={x.key} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <div className="text-sm text-foreground/90">{x.label}</div>
+                    <Checkbox
+                      checked={Boolean((status.settings as any)[x.key])}
+                      onChange={() =>
+                        setStatus((s) =>
+                          s
+                            ? {
+                                ...s,
+                                settings: { ...s.settings, [x.key]: !Boolean((s.settings as any)[x.key]) } as any,
+                              }
+                            : s
+                        )
+                      }
+                      label=""
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-4 text-sm text-muted-foreground">Connect a provider to configure sync.</div>
+            )}
+          </div>
+        </GlassSurface>
+
+        <GlassSurface variant="subtle" className="p-0">
           <Accordion type="single" collapsible className="w-full">
             <AccordionItem value="how-to-configure" className="border-none">
               <AccordionTrigger className="px-5 sm:px-6 py-4 hover:no-underline rounded-[24px] text-foreground/90 transition-colors hover:bg-white/5 data-[state=open]:bg-white/5">
@@ -313,8 +448,7 @@ export default function IntegrationsPage() {
                   <div className="text-xs text-muted-foreground">
                     Redirect URLs (built from <span className="font-mono">APP_URL</span>):
                     <div className="mt-2 space-y-1 font-mono text-[12px]">
-                      <div>{`$APP_URL/api/oauth/google/callback`}</div>
-                      <div>{`$APP_URL/api/oauth/notion/callback`}</div>
+                      <div>{`$APP_URL/api/integrations/google/callback`}</div>
                     </div>
                   </div>
                 </div>
@@ -333,7 +467,7 @@ export default function IntegrationsPage() {
         <Card
           provider="notion"
           title="Connect Notion"
-          description="Create pages in your Notion database."
+          description="Create pages in your Notion database (manual token setup for now)."
           icon={<NotepadText className="h-4 w-4 text-foreground/80" aria-hidden="true" />}
         />
 

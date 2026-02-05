@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { IntegrationRow, SyncAction } from "@/lib/sync/types"
+import type { IntegrationRow, SyncAction, TargetType } from "@/lib/sync/types"
 import { addDaysIsoDate, getObject, getString, isRecord } from "@/lib/sync/shared"
 
 function getEnv(name: string): string {
@@ -56,7 +56,7 @@ async function ensureGoogleAccessToken(
     .from("integrations")
     .update({ access_token: accessToken, expires_at: expiresAtIso })
     .eq("id", integration.id)
-    .select("id,user_id,provider,access_token,refresh_token,expires_at,meta,created_at")
+    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at")
     .single()
 
   if (error) throw error
@@ -86,6 +86,54 @@ async function googleCalendarRequest(
   return (await res.json()) as unknown
 }
 
+async function getExternalId(
+  supabase: SupabaseClient,
+  input: { userId: string; provider: "google"; targetType: string; targetId: string }
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("external_links")
+    .select("external_id")
+    .eq("user_id", input.userId)
+    .eq("provider", input.provider)
+    .eq("target_type", input.targetType)
+    .eq("target_id", input.targetId)
+    .maybeSingle()
+  if (error) return null
+  const id = typeof (data as any)?.external_id === "string" ? String((data as any).external_id) : ""
+  return id.trim() ? id.trim() : null
+}
+
+async function upsertExternalId(
+  supabase: SupabaseClient,
+  input: { userId: string; provider: "google"; targetType: string; targetId: string; externalId: string }
+) {
+  await supabase
+    .from("external_links")
+    .upsert(
+      {
+        user_id: input.userId,
+        provider: input.provider,
+        target_type: input.targetType,
+        target_id: input.targetId,
+        external_id: input.externalId,
+      },
+      { onConflict: "user_id,provider,target_type,target_id" }
+    )
+}
+
+async function deleteExternalId(
+  supabase: SupabaseClient,
+  input: { userId: string; provider: "google"; targetType: string; targetId: string }
+) {
+  await supabase
+    .from("external_links")
+    .delete()
+    .eq("user_id", input.userId)
+    .eq("provider", input.provider)
+    .eq("target_type", input.targetType)
+    .eq("target_id", input.targetId)
+}
+
 async function upsertEvent(
   accessToken: string,
   input: { calendarId: string; existingEventId?: string; body: Record<string, unknown> }
@@ -113,7 +161,8 @@ async function upsertEvent(
 
 type TaskRow = { id: string; title: string; due_at: string | null; meta: unknown }
 type PlanRow = { id: string; title: string; start_date: string | null; end_date: string | null; meta: unknown }
-type SubscriptionRow = { id: string; service: string; renewal_date: string | null; meta: unknown }
+type SubscriptionRow = { id: string; service: string; renewal_date: string | null; reminder_days: number | null; meta: unknown }
+type PersonRow = { id: string; name: string; birth_date: string | null; meta?: unknown }
 
 async function updateRecordMeta(
   supabase: SupabaseClient,
@@ -128,14 +177,49 @@ async function updateRecordMeta(
 export async function pushToGoogleCalendar(
   supabase: SupabaseClient,
   integration: IntegrationRow,
-  input: { action: SyncAction; recordId: string; log: (msg: string) => Promise<void> }
+  input: { action: SyncAction; targetType: string; targetId: string; log: (msg: string) => Promise<void> }
 ): Promise<void> {
-  const calendarId = "primary"
+  const meta = getObject(integration.metadata ?? integration.meta)
+  const calendarId = getString(meta.calendar_id) || "primary"
   const ensured = await ensureGoogleAccessToken(supabase, integration)
   const accessToken = ensured.accessToken
 
-  if (input.action === "push_task") {
-    const { data, error } = await supabase.from("tasks").select("id,title,due_at,meta").eq("id", input.recordId).single()
+  const userId = integration.user_id
+  const targetType = input.targetType as TargetType | string
+  const targetId = input.targetId
+
+  // Delete path (best-effort; delete external link even if provider deletion fails).
+  if (input.action === "delete") {
+    const existing = await getExternalId(supabase, { userId, provider: "google", targetType, targetId })
+    const existingFromMeta = async (): Promise<string | null> => {
+      if (targetType === "task") {
+        const { data } = await supabase.from("tasks").select("meta").eq("id", targetId).maybeSingle()
+        return data ? getString(getObject((data as any).meta).google_event_id) : null
+      }
+      if (targetType === "subscription") {
+        const { data } = await supabase.from("subscriptions").select("meta").eq("id", targetId).maybeSingle()
+        return data ? getString(getObject((data as any).meta).google_event_id) : null
+      }
+      if (targetType === "plan") {
+        const { data } = await supabase.from("plans").select("meta").eq("id", targetId).maybeSingle()
+        return data ? getString(getObject((data as any).meta).google_event_id) : null
+      }
+      return null
+    }
+    const eventId = existing || (await existingFromMeta())
+    if (eventId) {
+      await input.log("Deleting Google Calendar event…")
+      await googleCalendarRequest(accessToken, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, {
+        method: "DELETE",
+      })
+    }
+    await deleteExternalId(supabase, { userId, provider: "google", targetType, targetId })
+    await input.log("Deleted external link.")
+    return
+  }
+
+  if (targetType === "task") {
+    const { data, error } = await supabase.from("tasks").select("id,title,due_at,meta").eq("id", targetId).single()
     if (error) throw error
     const task = data as TaskRow
     if (!task.due_at) {
@@ -143,7 +227,9 @@ export async function pushToGoogleCalendar(
       return
     }
 
-    const existingEventId = getString(getObject(task.meta).google_event_id)
+    const existingEventId =
+      (await getExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id })) ??
+      getString(getObject(task.meta).google_event_id)
     const due = new Date(task.due_at)
     if (Number.isNaN(due.getTime())) {
       await input.log("Task due_at is invalid; skipping.")
@@ -159,14 +245,15 @@ export async function pushToGoogleCalendar(
 
     await input.log(existingEventId ? "Updating Google Calendar event for task…" : "Creating Google Calendar event for task…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
+    await upsertExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id, externalId: eventId })
     const nextMeta = { ...getObject(task.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "tasks", task.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
     return
   }
 
-  if (input.action === "push_plan") {
-    const { data, error } = await supabase.from("plans").select("id,title,start_date,end_date,meta").eq("id", input.recordId).single()
+  if (targetType === "plan") {
+    const { data, error } = await supabase.from("plans").select("id,title,start_date,end_date,meta").eq("id", targetId).single()
     if (error) throw error
     const plan = data as PlanRow
     const startDate = plan.start_date
@@ -178,7 +265,9 @@ export async function pushToGoogleCalendar(
     const endDateInclusive = plan.end_date ?? startDate
     const endExclusive = addDaysIsoDate(endDateInclusive, 1)
 
-    const existingEventId = getString(getObject(plan.meta).google_event_id)
+    const existingEventId =
+      (await getExternalId(supabase, { userId, provider: "google", targetType: "plan", targetId: plan.id })) ??
+      getString(getObject(plan.meta).google_event_id)
     const body = {
       summary: plan.title,
       start: { date: startDate },
@@ -187,17 +276,18 @@ export async function pushToGoogleCalendar(
 
     await input.log(existingEventId ? "Updating Google Calendar event for plan…" : "Creating Google Calendar event for plan…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
+    await upsertExternalId(supabase, { userId, provider: "google", targetType: "plan", targetId: plan.id, externalId: eventId })
     const nextMeta = { ...getObject(plan.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "plans", plan.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
     return
   }
 
-  if (input.action === "push_subscription") {
+  if (targetType === "subscription") {
     const { data, error } = await supabase
       .from("subscriptions")
-      .select("id,service,renewal_date,meta")
-      .eq("id", input.recordId)
+      .select("id,service,renewal_date,reminder_days,meta")
+      .eq("id", targetId)
       .single()
     if (error) throw error
     const sub = data as SubscriptionRow
@@ -206,24 +296,66 @@ export async function pushToGoogleCalendar(
       return
     }
 
-    const existingEventId = getString(getObject(sub.meta).google_event_id)
-    const endExclusive = addDaysIsoDate(sub.renewal_date, 1)
+    const existingEventId =
+      (await getExternalId(supabase, { userId, provider: "google", targetType: "subscription", targetId: sub.id })) ??
+      getString(getObject(sub.meta).google_event_id)
+
+    const reminderDays = typeof sub.reminder_days === "number" && sub.reminder_days > 0 ? Math.floor(sub.reminder_days) : 0
+    const eventDate = reminderDays > 0 ? addDaysIsoDate(sub.renewal_date, -reminderDays) : sub.renewal_date
+    const endExclusive = addDaysIsoDate(eventDate, 1)
     const body = {
-      summary: `Renew: ${sub.service}`,
-      start: { date: sub.renewal_date },
+      summary: `Renewal: ${sub.service}`,
+      start: { date: eventDate },
       end: { date: endExclusive },
     }
 
     await input.log(existingEventId ? "Updating Google Calendar event for subscription…" : "Creating Google Calendar event for subscription…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
+    await upsertExternalId(supabase, { userId, provider: "google", targetType: "subscription", targetId: sub.id, externalId: eventId })
     const nextMeta = { ...getObject(sub.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "subscriptions", sub.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
     return
   }
 
-  // Exhaustiveness guard.
-  const neverAction: never = input.action
-  throw new Error(`Unsupported action: ${neverAction}`)
+  if (targetType === "person") {
+    const { data, error } = await supabase.from("people").select("id,name,birth_date").eq("id", targetId).single()
+    if (error) throw error
+    const person = data as PersonRow
+    if (!person.birth_date) {
+      await input.log("Person has no birth_date; skipping Google Calendar event.")
+      return
+    }
+
+    // Create a yearly recurring all-day event. Start at the next occurrence.
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(person.birth_date)
+    if (!m) {
+      await input.log("birth_date is invalid; skipping.")
+      return
+    }
+    const mm = Number(m[2])
+    const dd = Number(m[3])
+    const now = new Date()
+    const y = now.getUTCFullYear()
+    const thisYear = new Date(Date.UTC(y, mm - 1, dd, 0, 0, 0))
+    const startDate = thisYear.getTime() >= now.getTime() ? `${y}-${m[2]}-${m[3]}` : `${y + 1}-${m[2]}-${m[3]}`
+    const endExclusive = addDaysIsoDate(startDate, 1)
+
+    const existingEventId =
+      (await getExternalId(supabase, { userId, provider: "google", targetType: "person", targetId: person.id })) ?? null
+    const body = {
+      summary: `Birthday: ${person.name}`,
+      start: { date: startDate },
+      end: { date: endExclusive },
+      recurrence: ["RRULE:FREQ=YEARLY"],
+    }
+    await input.log(existingEventId ? "Updating Google Calendar event for birthday…" : "Creating Google Calendar event for birthday…")
+    const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
+    await upsertExternalId(supabase, { userId, provider: "google", targetType: "person", targetId: person.id, externalId: eventId })
+    await input.log(`Saved google_event_id=${eventId}`)
+    return
+  }
+
+  throw new Error(`Unsupported target_type for Google Calendar: ${targetType}`)
 }
 

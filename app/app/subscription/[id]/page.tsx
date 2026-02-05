@@ -242,6 +242,23 @@ export default function SubscriptionDetailsPage() {
       })
 
       toast({ title: "Saved", variant: "success" })
+
+      // Best-effort: enqueue a sync job for connected integrations.
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (token) {
+          await fetch("/api/sync/enqueue", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ target_type: "subscription", target_id: subscription.id, action: "upsert" }),
+          })
+          // Best-effort: attempt processing immediately (retry is always available in Settings → Integrations).
+          await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+        }
+      } catch {
+        // non-blocking
+      }
     } catch (error: unknown) {
       console.error(error)
       toast({

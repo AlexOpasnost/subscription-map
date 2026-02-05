@@ -89,12 +89,17 @@ export async function GET(req: NextRequest) {
 
     const { data: existing } = await supabase
       .from("integrations")
-      .select("id,refresh_token,meta")
+      .select("id,refresh_token,meta,metadata")
       .eq("user_id", parsedState.userId)
       .eq("provider", "google")
       .maybeSingle()
 
     const nextMeta = mergeMeta(existing?.meta, {
+      provider: "google",
+      scopes: scope ? scope.split(/\s+/).filter(Boolean) : undefined,
+      calendar_id: "primary",
+    })
+    const nextMetadata = mergeMeta((existing as any)?.metadata ?? existing?.meta, {
       provider: "google",
       scopes: scope ? scope.split(/\s+/).filter(Boolean) : undefined,
       calendar_id: "primary",
@@ -109,7 +114,9 @@ export async function GET(req: NextRequest) {
           access_token: accessToken,
           refresh_token: refreshToken ?? existing?.refresh_token ?? null,
           expires_at: expiresAt,
+          scope: scope ?? null,
           meta: nextMeta,
+          metadata: nextMetadata,
         },
         { onConflict: "user_id,provider" }
       )

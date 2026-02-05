@@ -92,12 +92,18 @@ export async function GET(req: NextRequest) {
     const supabase = getSupabaseAdmin()
     const { data: existing } = await supabase
       .from("integrations")
-      .select("id,meta")
+      .select("id,meta,metadata")
       .eq("user_id", parsedState.userId)
       .eq("provider", "notion")
       .maybeSingle()
 
     const nextMeta = mergeMeta(existing?.meta, {
+      provider: "notion",
+      workspace_id: workspaceId,
+      workspace_name: workspaceName,
+      bot_id: botId,
+    })
+    const nextMetadata = mergeMeta((existing as any)?.metadata ?? existing?.meta, {
       provider: "notion",
       workspace_id: workspaceId,
       workspace_name: workspaceName,
@@ -113,7 +119,9 @@ export async function GET(req: NextRequest) {
           access_token: accessToken,
           refresh_token: null,
           expires_at: null,
+          scope: null,
           meta: nextMeta,
+          metadata: nextMetadata,
         },
         { onConflict: "user_id,provider" }
       )

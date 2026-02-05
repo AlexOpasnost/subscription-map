@@ -382,7 +382,12 @@ export async function POST(req: NextRequest) {
         await logActivity("error", { intent: parsed, status: "error", error: msg, result: { stage: "execute_error", preview } })
         return NextResponse.json<AssistantResponse>({ ok: false, error: msg, intent: parsed, preview }, { status: 400 })
       }
-      const sync = await enqueueSyncJobs(supabase, { userId, action: "push_subscription", payload: { record_id: created.id } })
+      const sync = await enqueueSyncJobs(supabase, {
+        userId,
+        action: "upsert",
+        targetType: "subscription",
+        targetId: created.id,
+      })
       await logEvent("ok")
       const planLabel = created.plan ? ` (${created.plan})` : ""
       const per = created.period === "yearly" ? "/yr" : "/mo"
@@ -435,7 +440,7 @@ export async function POST(req: NextRequest) {
         console.error("[assistant] tasks insert error", error)
         throw new Error(error.message)
       }
-      const sync = await enqueueSyncJobs(supabase, { userId, action: "push_task", payload: { record_id: created.id } })
+      const sync = await enqueueSyncJobs(supabase, { userId, action: "upsert", targetType: "task", targetId: created.id })
       await logEvent("ok")
       const message = `Added task: ${created?.title ?? args.title}`
       const result = created ?? null
@@ -503,7 +508,8 @@ export async function POST(req: NextRequest) {
       const result = created ?? null
       await logEvent("ok")
       await logActivity("action", { intent: parsed, status: "ok", result: { stage: "executed", message, result } })
-      return NextResponse.json<AssistantResponse>({ ok: true, stage: "executed", message, intent: parsed, preview, result })
+      const sync = await enqueueSyncJobs(supabase, { userId, action: "upsert", targetType: "person", targetId: created.id })
+      return NextResponse.json<AssistantResponse>({ ok: true, stage: "executed", message, intent: parsed, preview, result, sync })
     }
 
     if (parsed.kind === "action" && "action" in parsed && parsed.action === "add_reminder") {
@@ -626,7 +632,7 @@ export async function POST(req: NextRequest) {
         console.error("[assistant] plans insert error", error)
         throw new Error(error.message)
       }
-      const sync = await enqueueSyncJobs(supabase, { userId, action: "push_plan", payload: { record_id: created.id } })
+      const sync = await enqueueSyncJobs(supabase, { userId, action: "upsert", targetType: "plan", targetId: created.id })
       await logEvent("ok")
       const message = `Added plan: ${created?.title ?? args.title}`
       const result = created ?? null

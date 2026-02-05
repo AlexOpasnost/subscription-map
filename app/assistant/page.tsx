@@ -275,6 +275,35 @@ export default function AssistantPage() {
       setPendingPreview(null)
       await loadEvents()
       await loadTasks()
+
+      // Best-effort: run sync immediately so the user sees quick results.
+      try {
+        const syncRes = await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+        const syncJson = (await syncRes.json()) as any
+        if (syncRes.ok && Array.isArray(syncJson?.results)) {
+          const byProvider = new Map<string, { ok: number; error: number }>()
+          for (const r of syncJson.results as any[]) {
+            const p = typeof r?.provider === "string" ? r.provider : ""
+            if (!p) continue
+            const cur = byProvider.get(p) ?? { ok: 0, error: 0 }
+            if (r.status === "ok") cur.ok += 1
+            if (r.status === "error") cur.error += 1
+            byProvider.set(p, cur)
+          }
+          const parts: string[] = []
+          for (const p of ["google", "notion"]) {
+            const v = byProvider.get(p)
+            if (!v) continue
+            if (v.error > 0) parts.push(`${p} failed`)
+            else if (v.ok > 0) parts.push(`${p} synced`)
+          }
+          if (parts.length) {
+            toast({ title: "Sync", description: parts.join(" • "), variant: parts.some((x) => x.includes("failed")) ? "error" : "success" })
+          }
+        }
+      } catch {
+        // non-blocking
+      }
     } catch (err: unknown) {
       console.error("[assistant] execute request failed", err)
       const raw = err instanceof Error ? err.message : "Network error"
