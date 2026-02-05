@@ -639,7 +639,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json<AssistantResponse>({ ok: false, error: "Unsupported command.", intent: parsed, preview }, { status: 400 })
   } catch (err: unknown) {
     console.error("[assistant] command handling error", err)
-    const message = extractErrorMessage(err) || "Unexpected error"
+    const message = extractErrorMessage(err) || "Something went wrong while processing that."
     await logEvent("error", message)
     await logActivity("error", { intent: parsed, status: "error", error: message, result: { stage: "execute_error", preview } })
     return NextResponse.json<AssistantResponse>({ ok: false, error: toUserSafeAssistantError(message), intent: parsed, preview }, { status: 500 })

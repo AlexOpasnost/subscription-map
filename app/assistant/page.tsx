@@ -76,6 +76,35 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
 }
 
+function formatPreviewValue(v: unknown): string {
+  if (v === null || typeof v === "undefined") return "—"
+  if (typeof v === "string") return v
+  if (typeof v === "number" || typeof v === "boolean") return String(v)
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return String(v)
+  }
+}
+
+function renderPreviewDetails(preview: unknown) {
+  if (!isRecord(preview)) return null
+  const details = preview.details
+  if (!isRecord(details)) return null
+  const entries = Object.entries(details).filter(([_, v]) => typeof v !== "undefined")
+  if (entries.length === 0) return null
+  return (
+    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+      {entries.slice(0, 8).map(([k, v]) => (
+        <div key={k} className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{k}</div>
+          <div className="mt-0.5 text-xs text-foreground/85 break-words">{formatPreviewValue(v)}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function isSpendingResult(v: unknown): v is SpendingResult {
   if (!isRecord(v)) return false
   return typeof v.monthly_total === "number" && typeof v.yearly_total === "number"
@@ -336,8 +365,11 @@ export default function AssistantPage() {
               {!pendingPreview && livePreview ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <div className="text-xs text-muted-foreground">Preview</div>
-                  <div className="mt-1 text-sm font-medium text-foreground/90">{livePreview.title}</div>
+                  <div className="mt-1 text-sm font-medium text-foreground/90">
+                    I will create: {livePreview.title}
+                  </div>
                   <div className="mt-1 text-xs text-muted-foreground">{livePreview.summary}</div>
+                  {renderPreviewDetails(livePreview)}
                 </div>
               ) : null}
 
@@ -346,7 +378,7 @@ export default function AssistantPage() {
                   <div className="text-xs text-muted-foreground">Preview</div>
                   <div className="mt-1 text-sm font-medium text-foreground/90">
                     {isRecord(pendingPreview.preview) && typeof (pendingPreview.preview as any).title === "string"
-                      ? String((pendingPreview.preview as any).title)
+                      ? `I will create: ${String((pendingPreview.preview as any).title)}`
                       : "Preview"}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
@@ -354,6 +386,7 @@ export default function AssistantPage() {
                       ? String((pendingPreview.preview as any).summary)
                       : "Review and confirm."}
                   </div>
+                  {renderPreviewDetails(pendingPreview.preview)}
                   <div className="mt-3 flex flex-col sm:flex-row gap-2">
                     <Button type="button" variant="primary" className="h-10" onClick={confirmExecute} disabled={sending} loading={sending} loadingText="Saving…">
                       Confirm

@@ -310,8 +310,9 @@ export function parseInput(text: string): { parsed: AssistantEventParsed; error?
     return { parsed: { kind: "action", action: "add_subscription", args } }
   }
 
-  if (lower.startsWith("add task ")) {
-    const rest = raw.slice("add task ".length).trim()
+  function parseAddTask(restRaw: string): { parsed: AssistantEventParsed; error?: string } {
+    const rest = restRaw.trim()
+    if (!rest) return { parsed: { kind: "action", action: "add_task", args: {} }, error: "Missing task title." }
     const tokens = tokenize(rest)
     const keywords = new Set(["due", "amount", "category", "currency"])
     const firstKeywordIdx = tokens.findIndex((t) => keywords.has(t.toLowerCase()))
@@ -360,6 +361,28 @@ export function parseInput(text: string): { parsed: AssistantEventParsed; error?
       i++
     }
     return { parsed: { kind: "action", action: "add_task", args } }
+  }
+
+  // "add task …"
+  if (lower.startsWith("add task ")) {
+    return parseAddTask(raw.slice("add task ".length))
+  }
+
+  // Accept "Add tax payment …" / "Add bill …" without requiring "add task".
+  // Examples:
+  // - "Add tax payment due 2026-04-30 amount $1200"
+  // - "Add bill Pay electricity due 2026-03-10 amount 85"
+  if (lower.startsWith("add ")) {
+    const rest = raw.slice("add ".length).trim()
+    const restLower = rest.toLowerCase()
+    // Avoid stealing "add subscription/birthday/plan" which have their own parsers.
+    if (
+      !restLower.startsWith("subscription ") &&
+      !restLower.startsWith("birthday ") &&
+      !restLower.startsWith("plan ")
+    ) {
+      return parseAddTask(rest)
+    }
   }
 
   if (lower.startsWith("add birthday ")) {

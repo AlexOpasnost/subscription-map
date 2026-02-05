@@ -8,7 +8,7 @@ type ReminderRow = {
   target_type: string
   target_id: string | null
   rule_type: string
-  remind_at: string
+  remind_at: string | null
   created_at: string
 }
 
@@ -48,7 +48,13 @@ export async function POST(req: NextRequest) {
       ? String((body as any).target_id).trim()
       : null
   const rule_type = typeof (body as any)?.rule_type === "string" ? String((body as any).rule_type).trim() : ""
-  const remind_at = typeof (body as any)?.remind_at === "string" ? String((body as any).remind_at).trim() : ""
+  const remindAtRaw = (body as any)?.remind_at
+  const remind_at =
+    remindAtRaw === null || typeof remindAtRaw === "undefined"
+      ? null
+      : typeof remindAtRaw === "string"
+        ? String(remindAtRaw).trim()
+        : ""
   const offset_days = typeof (body as any)?.offset_days === "number" ? Math.floor((body as any).offset_days) : null
   const anchor_field = typeof (body as any)?.anchor_field === "string" ? String((body as any).anchor_field).trim() : null
   const rrule = typeof (body as any)?.rrule === "string" ? String((body as any).rrule).trim() : null
@@ -57,13 +63,40 @@ export async function POST(req: NextRequest) {
   if (!title) return NextResponse.json({ ok: false, error: "Missing title" }, { status: 400 })
   if (!target_type) return NextResponse.json({ ok: false, error: "Missing target_type" }, { status: 400 })
   if (!rule_type) return NextResponse.json({ ok: false, error: "Missing rule_type" }, { status: 400 })
-  if (!remind_at) return NextResponse.json({ ok: false, error: "Missing remind_at" }, { status: 400 })
-  if (!isIsoDateTime(remind_at)) return NextResponse.json({ ok: false, error: "Invalid remind_at (ISO timestamp expected)" }, { status: 400 })
-  if (rule_type === "recurring" && !rrule) {
-    return NextResponse.json({ ok: false, error: "Missing rrule for recurring reminder" }, { status: 400 })
+
+  const rule = rule_type.toLowerCase()
+  if (rule !== "absolute" && rule !== "offset_before" && rule !== "recurring") {
+    return NextResponse.json({ ok: false, error: "Invalid rule_type. Use absolute, offset_before, or recurring." }, { status: 400 })
   }
-  if (rule_type === "offset_before" && (!offset_days || offset_days <= 0)) {
-    return NextResponse.json({ ok: false, error: "Missing offset_days (>0) for offset_before reminder" }, { status: 400 })
+
+  if (rule === "absolute") {
+    if (!remind_at) return NextResponse.json({ ok: false, error: "Missing remind_at for absolute reminder" }, { status: 400 })
+    if (!isIsoDateTime(remind_at)) {
+      return NextResponse.json({ ok: false, error: "Invalid remind_at (ISO timestamp expected)" }, { status: 400 })
+    }
+  } else if (rule === "offset_before") {
+    if (!offset_days || offset_days <= 0) {
+      return NextResponse.json({ ok: false, error: "Missing offset_days (>0) for offset_before reminder" }, { status: 400 })
+    }
+    if (!anchor_field || !anchor_field.trim()) {
+      return NextResponse.json({ ok: false, error: "Missing anchor_field for offset_before reminder" }, { status: 400 })
+    }
+    if (!target_id) {
+      return NextResponse.json(
+        { ok: false, error: "Missing target_id for offset_before reminder (so the date can be computed)." },
+        { status: 400 }
+      )
+    }
+    if (remind_at && !isIsoDateTime(remind_at)) {
+      return NextResponse.json({ ok: false, error: "Invalid remind_at (ISO timestamp expected)" }, { status: 400 })
+    }
+  } else if (rule === "recurring") {
+    if (!rrule || !rrule.trim()) {
+      return NextResponse.json({ ok: false, error: "Missing rrule for recurring reminder" }, { status: 400 })
+    }
+    if (remind_at && !isIsoDateTime(remind_at)) {
+      return NextResponse.json({ ok: false, error: "Invalid remind_at (ISO timestamp expected)" }, { status: 400 })
+    }
   }
 
   const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
@@ -90,10 +123,10 @@ export async function POST(req: NextRequest) {
       kind: "api",
       target_type,
       target_id,
-      remind_at,
+      remind_at: remind_at || null,
       // v2 columns (007)
       title,
-      rule_type,
+      rule_type: rule,
       offset_days,
       anchor_field,
       rrule,

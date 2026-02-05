@@ -40,6 +40,13 @@ function iconFor(type: TimelineItem["type"]) {
   return Bell
 }
 
+function hrefForItem(it: TimelineItem): string | null {
+  const id = typeof it.meta?.id === "string" ? it.meta.id : ""
+  if (!id) return null
+  if (it.type === "subscription") return `/app/subscription/${id}`
+  return null
+}
+
 export default function TimelinePage() {
   const { user, signOut } = useAuth()
   const { toast } = useToast()
@@ -193,24 +200,48 @@ export default function TimelinePage() {
                     {items.map((it, idx) => {
                       const Icon = iconFor(it.type)
                       const badge = it.type
+                      const href = hrefForItem(it)
                       return (
-                        <div key={`${it.type}-${it.date}-${idx}`} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
-                                  <Icon className="h-4 w-4 text-foreground/80" aria-hidden="true" />
-                                </span>
+                        <div key={`${it.type}-${it.date}-${idx}`} className="rounded-2xl border border-white/10 bg-white/5">
+                          {href ? (
+                            <Link href={href} className="block px-4 py-3 hover:bg-white/[0.03] rounded-2xl">
+                              <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
-                                  <div className="mt-0.5 text-xs text-muted-foreground">{formatWhen(it.date)}</div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                                      <Icon className="h-4 w-4 text-foreground/80" aria-hidden="true" />
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
+                                      <div className="mt-0.5 text-xs text-muted-foreground">{formatWhen(it.date)}</div>
+                                    </div>
+                                  </div>
                                 </div>
+                                <Badge variant="secondary" className="shrink-0 bg-white/5 border-white/10 text-foreground/80">
+                                  {badge}
+                                </Badge>
+                              </div>
+                            </Link>
+                          ) : (
+                            <div className="px-4 py-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                                      <Icon className="h-4 w-4 text-foreground/80" aria-hidden="true" />
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
+                                      <div className="mt-0.5 text-xs text-muted-foreground">{formatWhen(it.date)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant="secondary" className="shrink-0 bg-white/5 border-white/10 text-foreground/80">
+                                  {badge}
+                                </Badge>
                               </div>
                             </div>
-                            <Badge variant="secondary" className="shrink-0 bg-white/5 border-white/10 text-foreground/80">
-                              {badge}
-                            </Badge>
-                          </div>
+                          )}
                         </div>
                       )
                     })}
@@ -238,24 +269,48 @@ export default function TimelinePage() {
                     {items.map((it, idx) => {
                       const Icon = iconFor(it.type)
                       const badge = it.type
+                      const href = hrefForItem(it)
                       return (
-                        <div key={`${it.type}-${it.date}-${idx}`} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
-                                  <Icon className="h-4 w-4 text-foreground/80" aria-hidden="true" />
-                                </span>
+                        <div key={`${it.type}-${it.date}-${idx}`} className="rounded-2xl border border-white/10 bg-white/5">
+                          {href ? (
+                            <Link href={href} className="block px-4 py-3 hover:bg-white/[0.03] rounded-2xl">
+                              <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
-                                  <div className="mt-0.5 text-xs text-muted-foreground">{formatWhen(it.date)}</div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                                      <Icon className="h-4 w-4 text-foreground/80" aria-hidden="true" />
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
+                                      <div className="mt-0.5 text-xs text-muted-foreground">{formatWhen(it.date)}</div>
+                                    </div>
+                                  </div>
                                 </div>
+                                <Badge variant="secondary" className="shrink-0 bg-white/5 border-white/10 text-foreground/80">
+                                  {badge}
+                                </Badge>
+                              </div>
+                            </Link>
+                          ) : (
+                            <div className="px-4 py-3">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-white/10 bg-white/5">
+                                      <Icon className="h-4 w-4 text-foreground/80" aria-hidden="true" />
+                                    </span>
+                                    <div className="min-w-0">
+                                      <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
+                                      <div className="mt-0.5 text-xs text-muted-foreground">{formatWhen(it.date)}</div>
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant="secondary" className="shrink-0 bg-white/5 border-white/10 text-foreground/80">
+                                  {badge}
+                                </Badge>
                               </div>
                             </div>
-                            <Badge variant="secondary" className="shrink-0 bg-white/5 border-white/10 text-foreground/80">
-                              {badge}
-                            </Badge>
-                          </div>
+                          )}
                         </div>
                       )
                     })}
