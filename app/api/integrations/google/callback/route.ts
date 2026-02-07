@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getAppOrigin } from "@/lib/integrations/getAppOrigin"
 import { verifyIntegrationState } from "@/lib/integrations/state"
-import { requireServerEnv } from "@/lib/env"
+import { normalizeAbsoluteUrl, requireServerEnv } from "@/lib/env"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
+
+const STATE_COOKIE = "sm_google_oauth_nonce"
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -14,15 +15,25 @@ function mergeMeta(prev: unknown, next: Record<string, unknown>): Record<string,
 }
 
 export async function GET(req: NextRequest) {
-  const fallbackOrigin = req.nextUrl.origin
-  const appOrigin = (() => {
-    try {
-      return getAppOrigin({ required: false })
-    } catch {
-      return fallbackOrigin
-    }
-  })()
-  const redirectTo = new URL("/settings/integrations", appOrigin)
+  // Required env vars (server-only):
+  // - APP_URL
+  // - GOOGLE_CLIENT_ID
+  // - GOOGLE_CLIENT_SECRET
+  const originForErrors = req.nextUrl.origin
+  let appUrl = ""
+  try {
+    appUrl = normalizeAbsoluteUrl(
+      requireServerEnv("APP_URL", "Set it to your Vercel origin, e.g. https://subscription-map-six.vercel.app")
+    )
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Missing APP_URL"
+    const redirectTo = new URL("/settings/integrations", originForErrors)
+    redirectTo.searchParams.set("error", "google:config")
+    redirectTo.searchParams.set("details", message.slice(0, 600))
+    return NextResponse.redirect(redirectTo)
+  }
+
+  const redirectTo = new URL("/settings/integrations", appUrl)
 
   try {
     const url = new URL(req.url)
@@ -45,9 +56,25 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(redirectTo)
     }
 
+    // CSRF: ensure the nonce we issued on /start matches this callback.
+    const cookieNonce = req.cookies.get(STATE_COOKIE)?.value ?? ""
+    if (!cookieNonce || cookieNonce !== parsedState.nonce) {
+      redirectTo.searchParams.set("error", "google:invalid_state")
+      redirectTo.searchParams.set("details", "State cookie mismatch. Please retry connecting Google.")
+      const res = NextResponse.redirect(redirectTo)
+      res.cookies.set(STATE_COOKIE, "", {
+        httpOnly: true,
+        secure: appUrl.startsWith("https://"),
+        sameSite: "lax",
+        path: "/api/integrations/google/callback",
+        maxAge: 0,
+      })
+      return res
+    }
+
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
     const clientSecret = requireServerEnv("GOOGLE_CLIENT_SECRET")
-    const redirectUri = `${appOrigin}/api/integrations/google/callback`
+    const redirectUri = `${appUrl}/api/integrations/google/callback`
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",
@@ -124,16 +151,41 @@ export async function GET(req: NextRequest) {
     if (upsertError) {
       redirectTo.searchParams.set("error", "google:store_failed")
       redirectTo.searchParams.set("details", upsertError.message)
-      return NextResponse.redirect(redirectTo)
+      const res = NextResponse.redirect(redirectTo)
+      res.cookies.set(STATE_COOKIE, "", {
+        httpOnly: true,
+        secure: appUrl.startsWith("https://"),
+        sameSite: "lax",
+        path: "/api/integrations/google/callback",
+        maxAge: 0,
+      })
+      return res
     }
 
     redirectTo.searchParams.set("connected", "google")
-    return NextResponse.redirect(redirectTo)
+    const res = NextResponse.redirect(redirectTo)
+    // Clear nonce cookie after successful connect.
+    res.cookies.set(STATE_COOKIE, "", {
+      httpOnly: true,
+      secure: appUrl.startsWith("https://"),
+      sameSite: "lax",
+      path: "/api/integrations/google/callback",
+      maxAge: 0,
+    })
+    return res
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Unexpected error"
     redirectTo.searchParams.set("error", "google:unexpected")
     redirectTo.searchParams.set("details", message.slice(0, 600))
-    return NextResponse.redirect(redirectTo)
+    const res = NextResponse.redirect(redirectTo)
+    res.cookies.set(STATE_COOKIE, "", {
+      httpOnly: true,
+      secure: appUrl.startsWith("https://"),
+      sameSite: "lax",
+      path: "/api/integrations/google/callback",
+      maxAge: 0,
+    })
+    return res
   }
 }
 

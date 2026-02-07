@@ -16,6 +16,7 @@ import AppHeader from "@/components/AppHeader"
 import { GlassSurface } from "@/components/ui/GlassSurface"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Accordion,
   AccordionContent,
@@ -24,6 +25,7 @@ import {
 } from "@/components/ui/accordion"
 import { useToast } from "@/components/ToastProvider"
 import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
+import type { Action } from "@/lib/assistant/actionSchema"
 import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 
@@ -66,6 +68,9 @@ type UpcomingRenewalItem = {
   category: string
 }
 type UpcomingRenewalsResult = { items: UpcomingRenewalItem[] }
+
+type AiParseResponse = { action: Action; error?: string }
+type AiExecuteResponse = { ok: true; action: Action; result?: unknown; message?: string } | { ok: false; error: string; action?: Action }
 
 function formatMoney(n: number): string {
   if (!Number.isFinite(n)) return "$0.00"
@@ -116,22 +121,41 @@ function isUpcomingRenewalsResult(v: unknown): v is UpcomingRenewalsResult {
   return true
 }
 
+function isAiSpendingPayload(v: unknown): v is { monthly_total?: number; yearly_total?: number } {
+  if (!isRecord(v)) return false
+  const m = (v as any).monthly_total
+  const y = (v as any).yearly_total
+  return (typeof m === "number" && Number.isFinite(m)) || (typeof y === "number" && Number.isFinite(y))
+}
+
+function isAiTimelinePayload(v: unknown): v is { from: string; to: string; items: Array<{ type: string; title: string; date: string }> } {
+  if (!isRecord(v)) return false
+  if (typeof (v as any).from !== "string") return false
+  if (typeof (v as any).to !== "string") return false
+  if (!Array.isArray((v as any).items)) return false
+  return true
+}
+
 export default function AssistantPage() {
   const { user, signOut } = useAuth()
   const { toast } = useToast()
   const [text, setText] = useState("")
   const [sending, setSending] = useState(false)
+  const [aiMode, setAiMode] = useState(true)
+  const [isParsing, setIsParsing] = useState(false)
   const [events, setEvents] = useState<AssistantEventRow[]>([])
   const [activity, setActivity] = useState<AssistantActivityRow[] | null>(null)
   const [tasks, setTasks] = useState<TaskRow[] | null>(null)
   const [lastResult, setLastResult] = useState<AssistantApiResponse | null>(null)
+  const [aiLastResult, setAiLastResult] = useState<AiExecuteResponse | null>(null)
   const [pendingPreview, setPendingPreview] = useState<{
     commandText: string
     intent: unknown
     preview: unknown
   } | null>(null)
+  const [pendingAction, setPendingAction] = useState<{ text: string; action: Action } | null>(null)
 
-  const canSend = useMemo(() => text.trim().length > 0 && !sending, [text, sending])
+  const canSend = useMemo(() => text.trim().length > 0 && !sending && !isParsing, [text, sending, isParsing])
   const livePreview = useMemo(() => {
     const s = text.trim()
     if (!s) return null
@@ -194,7 +218,7 @@ export default function AssistantPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
 
-  const send = async () => {
+  const sendLegacy = async () => {
     if (!canSend) return
     if (!user) return
 
@@ -232,6 +256,137 @@ export default function AssistantPage() {
       console.error("[assistant] preview request failed", err)
       const raw = err instanceof Error ? err.message : "Network error"
       toast({ title: "Couldn’t preview", description: raw, variant: "error" })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function previewForAction(action: Action): { title: string; summary: string; details?: Record<string, unknown> } {
+    if (action.type === "add_task") {
+      return {
+        title: "Task",
+        summary: action.due_date ? `${action.title} on ${action.due_date}` : action.title,
+        details: {
+          title: action.title,
+          due_date: action.due_date,
+          remind_days_before: action.remind_days_before,
+          notes: action.notes,
+        },
+      }
+    }
+    if (action.type === "add_subscription") {
+      return {
+        title: "Subscription",
+        summary: `${action.service}${action.period ? ` (${action.period})` : ""}`,
+        details: {
+          service: action.service,
+          plan: action.plan,
+          price_cents: action.price_cents,
+          period: action.period,
+          category: action.category,
+          next_renewal: action.next_renewal,
+          remind_days_before: action.remind_days_before,
+        },
+      }
+    }
+    if (action.type === "add_plan") {
+      return {
+        title: "Plan",
+        summary: action.date ? `${action.title} on ${action.date}` : action.title,
+        details: { title: action.title, date: action.date, notes: action.notes },
+      }
+    }
+    if (action.type === "question_spending") {
+      return { title: "Question", summary: `Spending (${action.timeframe ?? "month"})`, details: { timeframe: action.timeframe ?? "month" } }
+    }
+    if (action.type === "timeline") {
+      return { title: "Question", summary: `Timeline (${action.from ?? "today"} → ${action.to ?? "next 7 days"})`, details: { from: action.from, to: action.to } }
+    }
+    return { title: "Unsupported", summary: action.reason, details: { reason: action.reason, suggestions: action.suggestions } }
+  }
+
+  const sendAiParse = async () => {
+    if (!canSend) return
+    if (!user) return
+
+    setIsParsing(true)
+    setLastResult(null)
+    setAiLastResult(null)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
+        return
+      }
+
+      const res = await fetch("/api/assistant/parse", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ text }),
+      })
+
+      const json = (await res.json()) as AiParseResponse
+      if (!res.ok || !json?.action) {
+        const msg = typeof (json as any)?.error === "string" ? String((json as any).error) : `HTTP ${res.status}`
+        toast({ title: "Couldn’t parse", description: msg, variant: "error" })
+        return
+      }
+
+      setPendingAction({ text, action: json.action })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error"
+      toast({ title: "Couldn’t parse", description: msg, variant: "error" })
+    } finally {
+      setIsParsing(false)
+    }
+  }
+
+  const send = async () => {
+    if (aiMode) return await sendAiParse()
+    return await sendLegacy()
+  }
+
+  const confirmExecuteAction = async () => {
+    if (!pendingAction) return
+    if (!user) return
+    setSending(true)
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData.session?.access_token
+      if (!token) {
+        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
+        return
+      }
+
+      const res = await fetch("/api/assistant/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: pendingAction.action, text: pendingAction.text }),
+      })
+      const json = (await res.json()) as AiExecuteResponse
+      setAiLastResult(json)
+
+      if (!res.ok || !json.ok) {
+        console.error("[assistant] AI execute failed", { status: res.status, json })
+        const msg = !json.ok && typeof json.error === "string" ? json.error : `HTTP ${res.status}`
+        toast({ title: "Couldn’t execute", description: msg, variant: "error" })
+        return
+      }
+
+      if (pendingAction.action.type === "unsupported") {
+        toast({ title: "Unsupported", description: pendingAction.action.reason, variant: "error" })
+      } else {
+        toast({ title: "Saved", description: typeof json.message === "string" ? json.message : "Done.", variant: "success" })
+      }
+
+      setText("")
+      setPendingAction(null)
+      await loadEvents()
+      await loadTasks()
     } finally {
       setSending(false)
     }
@@ -378,6 +533,69 @@ export default function AssistantPage() {
     return null
   }
 
+  const renderAiResult = () => {
+    if (!aiLastResult || !aiLastResult.ok) return null
+    const data = aiLastResult.result
+    if (isAiSpendingPayload(data)) {
+      const m = typeof (data as any).monthly_total === "number" ? (data as any).monthly_total : null
+      const y = typeof (data as any).yearly_total === "number" ? (data as any).yearly_total : null
+      return (
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="p-5 sm:p-6">
+            <div className="text-sm font-semibold text-foreground/90">Spending</div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {m !== null ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs text-muted-foreground">Monthly</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-foreground/95">{formatMoney(m)}</div>
+                </div>
+              ) : null}
+              {y !== null ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="text-xs text-muted-foreground">Yearly</div>
+                  <div className="mt-1 text-xl font-semibold tabular-nums text-foreground/95">{formatMoney(y)}</div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </GlassSurface>
+      )
+    }
+
+    if (isAiTimelinePayload(data)) {
+      const items = (data as any).items as Array<{ type: string; title: string; date: string }>
+      return (
+        <GlassSurface variant="subtle" className="p-0">
+          <div className="p-5 sm:p-6">
+            <div className="text-sm font-semibold text-foreground/90">Timeline</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {String((data as any).from)} → {String((data as any).to)}
+            </div>
+            <div className="mt-3 space-y-2">
+              {items.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Nothing coming up.</div>
+              ) : (
+                items.slice(0, 12).map((it, idx) => (
+                  <div key={`${it.type}-${it.date}-${idx}`} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-foreground/90 truncate">{it.title}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">{new Date(it.date).toLocaleString()}</div>
+                      </div>
+                      <div className="text-xs text-muted-foreground shrink-0">{it.type}</div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </GlassSurface>
+      )
+    }
+
+    return null
+  }
+
   return (
     <PageShell>
       <AppHeader title="Assistant" onSignOut={signOut} currentPage="assistant" />
@@ -386,12 +604,26 @@ export default function AssistantPage() {
         <GlassSurface className="p-0">
           <div className="p-6 sm:p-8">
             <div className="text-sm font-semibold text-foreground/90">Assistant Inbox</div>
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div className="text-sm text-foreground/85">AI mode</div>
+              <Checkbox
+                checked={aiMode}
+                onChange={() => {
+                  setAiMode((v) => !v)
+                  setPendingAction(null)
+                  setPendingPreview(null)
+                  setLastResult(null)
+                  setAiLastResult(null)
+                }}
+                label=""
+              />
+            </div>
             <div className="mt-2 text-sm text-muted-foreground">
               Type a command like: <span className="text-foreground/80">add task pay rent due 2026-02-01</span>
             </div>
 
             <div className="mt-4 space-y-3">
-              {!pendingPreview && livePreview ? (
+              {!aiMode && !pendingPreview && livePreview ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <div className="text-xs text-muted-foreground">Preview</div>
                   <div className="mt-1 text-sm font-medium text-foreground/90">
@@ -402,7 +634,52 @@ export default function AssistantPage() {
                 </div>
               ) : null}
 
-              {pendingPreview ? (
+              {aiMode && pendingAction ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div className="text-xs text-muted-foreground">Preview</div>
+                  <div className="mt-1 text-sm font-medium text-foreground/90">
+                    I will create: {previewForAction(pendingAction.action).title}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">{previewForAction(pendingAction.action).summary}</div>
+                  {renderPreviewDetails({ details: previewForAction(pendingAction.action).details ?? {} })}
+                  <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      className="h-10"
+                      onClick={confirmExecuteAction}
+                      disabled={sending}
+                      loading={sending}
+                      loadingText="Saving…"
+                    >
+                      Confirm
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10"
+                      onClick={() => setPendingAction(null)}
+                      disabled={sending}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-10"
+                      onClick={() => {
+                        setPendingAction(null)
+                        setLastResult(null)
+                        setAiLastResult(null)
+                        setText("")
+                      }}
+                      disabled={sending}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : pendingPreview ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <div className="text-xs text-muted-foreground">Preview</div>
                   <div className="mt-1 text-sm font-medium text-foreground/90">
@@ -450,19 +727,19 @@ export default function AssistantPage() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="What do you want to do?"
-                disabled={sending || !!pendingPreview}
+                disabled={sending || !!pendingPreview || !!pendingAction || isParsing}
                 className="min-h-[110px]"
               />
               <div className="flex items-center justify-end">
-                {!pendingPreview ? (
+                {!pendingPreview && !pendingAction ? (
                   <Button
                     type="button"
                     variant="primary"
                     className="h-11 px-5 text-[15px] font-semibold tracking-tight"
                     onClick={send}
                     disabled={!canSend}
-                    loading={sending}
-                    loadingText="Previewing…"
+                    loading={sending || isParsing}
+                    loadingText={aiMode ? "Parsing…" : "Previewing…"}
                   >
                     Send
                   </Button>
@@ -486,6 +763,10 @@ export default function AssistantPage() {
                     <div>add birthday Mom 2000-05-12 remind 7 days before</div>
                     <div>remind me to cancel Netflix on the 21st</div>
                     <div>remind me to cancel Netflix 3 days before renewal</div>
+                    <div>Добавь подписку Spotify $14.99 ежемесячно</div>
+                    <div>Напомни отменить Netflix 22 февраля</div>
+                    <div>Сколько я трачу в этом месяце?</div>
+                    <div>Что у меня на этой неделе?</div>
                     <div>what am i spending monthly?</div>
                     <div>what's due this week?</div>
                   </div>
@@ -495,6 +776,7 @@ export default function AssistantPage() {
           </div>
         </GlassSurface>
 
+        {renderAiResult()}
         {renderResult()}
 
         <GlassSurface variant="subtle" className="p-0">

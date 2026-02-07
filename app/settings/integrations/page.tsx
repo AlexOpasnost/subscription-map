@@ -110,8 +110,21 @@ export default function IntegrationsPage() {
     setBusyProvider(provider)
     try {
       if (provider === "google") {
-        // Redirect to OAuth (GET).
-        window.location.href = `/api/integrations/google/start?user_id=${encodeURIComponent(user.id)}`
+        // Start OAuth server-side (keeps userId tied to the current session).
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (!token) throw new Error("You’re signed out. Please sign in again.")
+
+        const res = await fetch("/api/integrations/google/start", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const json = (await res.json()) as any
+        if (!res.ok || typeof json?.url !== "string" || !json.url) {
+          const msg = typeof json?.error === "string" ? json.error : `HTTP ${res.status}`
+          throw new Error(msg)
+        }
+        window.location.href = json.url
         return
       }
       // Notion uses token+database connect below.
