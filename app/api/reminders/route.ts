@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 
 type ReminderRow = {
   id: string
@@ -10,12 +11,6 @@ type ReminderRow = {
   rule_type: string
   remind_at: string | null
   created_at: string
-}
-
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v
 }
 
 function getBearerToken(req: NextRequest): string | null {
@@ -99,8 +94,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  const supabaseUrl = requireSupabaseUrl()
+  const supabaseAnonKey = requireSupabaseAnonKey()
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

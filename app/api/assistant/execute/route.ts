@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
 import { ActionSchema, type Action } from "@/lib/assistant/actionSchema"
+import { requireServerEnv, requireSupabaseAnonKey, requireSupabaseServiceRoleKey, requireSupabaseUrl } from "@/lib/env"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 
 function getBearerToken(req: NextRequest): string | null {
@@ -9,20 +10,6 @@ function getBearerToken(req: NextRequest): string | null {
   if (!h) return null
   const m = /^Bearer\\s+(.+)$/.exec(h)
   return m ? m[1].trim() : null
-}
-
-function requireEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v.trim()
-}
-
-function requireSupabaseEnv(): { supabaseUrl: string; supabaseAnonKey: string } {
-  const supabaseUrl = (process.env.SUPABASE_URL ?? "").trim()
-  const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY ?? "").trim()
-  if (!supabaseUrl) throw new Error("Missing environment variable: SUPABASE_URL")
-  if (!supabaseAnonKey) throw new Error("Missing environment variable: SUPABASE_ANON_KEY")
-  return { supabaseUrl, supabaseAnonKey }
 }
 
 function isoTodayUtc(): string {
@@ -40,10 +27,12 @@ type ExecuteResponse =
 
 export async function POST(req: NextRequest) {
   try {
-    requireEnv("SUPABASE_SERVICE_ROLE_KEY")
-    requireEnv("APP_URL")
-    requireEnv("OPENAI_API_KEY")
-    requireSupabaseEnv()
+    requireSupabaseServiceRoleKey()
+    requireServerEnv("APP_URL")
+    // Not used in this endpoint, but required by product spec.
+    requireServerEnv("OPENAI_API_KEY")
+    requireSupabaseUrl()
+    requireSupabaseAnonKey()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Missing environment variables."
     return NextResponse.json<ExecuteResponse>({ ok: false, error: msg }, { status: 500 })
@@ -69,7 +58,8 @@ export async function POST(req: NextRequest) {
 
   const inputText = typeof (body as any)?.text === "string" ? String((body as any).text).trim() : ""
 
-  const { supabaseUrl, supabaseAnonKey } = requireSupabaseEnv()
+  const supabaseUrl = requireSupabaseUrl()
+  const supabaseAnonKey = requireSupabaseAnonKey()
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

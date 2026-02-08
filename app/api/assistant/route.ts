@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 
+import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 import type {
   AddBirthdayArgs,
   AddPlanArgs,
@@ -35,12 +36,6 @@ type AssistantErrorResponse = {
   details?: unknown
 }
 type AssistantResponse = AssistantOkResponse | AssistantErrorResponse
-
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v
-}
 
 function toIsoDateOnly(input: string): string | null {
   const s = input.trim()
@@ -135,8 +130,8 @@ function isoDateOnlyFromIso(iso: string): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  const supabaseUrl = requireSupabaseUrl()
+  const supabaseAnonKey = requireSupabaseAnonKey()
 
   const token = getBearerToken(req)
   if (!token) {

@@ -1,7 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server"
 import OpenAI from "openai"
 
-import { normalizeAbsoluteUrl, requireServerEnv } from "@/lib/env"
+import {
+  normalizeAbsoluteUrl,
+  requireServerEnv,
+  requireSupabaseAnonKey,
+  requireSupabaseServiceRoleKey,
+  requireSupabaseUrl,
+} from "@/lib/env"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 import { ActionSchema, unsupported, type Action } from "@/lib/assistant/actionSchema"
 
@@ -10,14 +16,6 @@ function getBearerToken(req: NextRequest): string | null {
   if (!h) return null
   const m = /^Bearer\s+(.+)$/.exec(h)
   return m ? m[1].trim() : null
-}
-
-function requireSupabaseEnv(): { supabaseUrl: string; supabaseAnonKey: string } {
-  const supabaseUrl = (process.env.SUPABASE_URL ?? "").trim()
-  const supabaseAnonKey = (process.env.SUPABASE_ANON_KEY ?? "").trim()
-  if (!supabaseUrl) throw new Error("Missing environment variable: SUPABASE_URL")
-  if (!supabaseAnonKey) throw new Error("Missing environment variable: SUPABASE_ANON_KEY")
-  return { supabaseUrl, supabaseAnonKey }
 }
 
 function extractFirstJsonObject(text: string): unknown | null {
@@ -99,9 +97,10 @@ export async function POST(req: NextRequest) {
   try {
     // Fail early for required env vars (as requested).
     requireServerEnv("OPENAI_API_KEY")
-    requireServerEnv("SUPABASE_SERVICE_ROLE_KEY")
+    requireSupabaseServiceRoleKey()
     normalizeAbsoluteUrl(requireServerEnv("APP_URL"))
-    requireSupabaseEnv()
+    requireSupabaseUrl()
+    requireSupabaseAnonKey()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Missing environment variables."
     return NextResponse.json({ error: msg, action: unsupported(msg) }, { status: 500 })

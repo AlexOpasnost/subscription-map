@@ -1,4 +1,5 @@
 import { createClient, type PostgrestError } from "@supabase/supabase-js"
+import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 
 export type SubscriptionPeriod = "monthly" | "yearly"
 
@@ -53,12 +54,6 @@ class SubscriptionValidationError extends Error {
   }
 }
 
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v
-}
-
 function normalizeText(input: unknown, opts?: { maxLen?: number; allowEmpty?: boolean }): string {
   const maxLen = opts?.maxLen ?? 200
   const allowEmpty = opts?.allowEmpty ?? false
@@ -78,8 +73,8 @@ function requireAccessTokenOnServer(accessToken: string | undefined): string {
 }
 
 function buildSupabaseClientForToken(accessToken: string) {
-  const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  const supabaseUrl = requireSupabaseUrl()
+  const supabaseAnonKey = requireSupabaseAnonKey()
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

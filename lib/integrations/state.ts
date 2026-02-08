@@ -1,4 +1,5 @@
 import crypto from "crypto"
+import { requireSupabaseServiceRoleKey } from "@/lib/env"
 
 type StatePayload = {
   userId: string
@@ -31,9 +32,7 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 function getStateSecret(): string {
   // Reuse SUPABASE_SERVICE_ROLE_KEY so we don't introduce a new required env var.
-  const v = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!v || !v.trim()) throw new Error("Missing environment variable: SUPABASE_SERVICE_ROLE_KEY")
-  return v
+  return requireSupabaseServiceRoleKey()
 }
 
 export function signIntegrationState(payload: Omit<StatePayload, "nonce"> & { nonce?: string }): string {

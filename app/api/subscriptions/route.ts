@@ -8,6 +8,7 @@ import {
   SubscriptionValidationError,
 } from "@/lib/subscriptions/createSubscription"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
+import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 
 type Ok = { ok: true; data: SubscriptionRow }
 type Err = { ok: false; message: string; details?: unknown }
@@ -42,8 +43,8 @@ export async function POST(req: NextRequest) {
     const created = await createSubscription(body as CreateSubscriptionInput, { accessToken: token })
     // Best-effort enqueue; never block creating the subscription.
     try {
-      const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
-      const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+      const supabaseUrl = requireSupabaseUrl()
+      const supabaseAnonKey = requireSupabaseAnonKey()
       const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         global: { headers: { Authorization: `Bearer ${token}` } },
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

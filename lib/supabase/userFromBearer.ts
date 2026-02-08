@@ -1,14 +1,9 @@
 import { createClient } from "@supabase/supabase-js"
-
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v
-}
+import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 
 export async function getUserIdFromAccessToken(accessToken: string): Promise<string> {
-  const supabaseUrl = getEnv("NEXT_PUBLIC_SUPABASE_URL")
-  const supabaseAnonKey = getEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  const supabaseUrl = requireSupabaseUrl()
+  const supabaseAnonKey = requireSupabaseAnonKey()
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
