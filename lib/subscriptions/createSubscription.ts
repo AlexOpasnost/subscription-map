@@ -1,5 +1,4 @@
 import { createClient, type PostgrestError } from "@supabase/supabase-js"
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 
 export type SubscriptionPeriod = "monthly" | "yearly"
 
@@ -73,8 +72,13 @@ function requireAccessTokenOnServer(accessToken: string | undefined): string {
 }
 
 function buildSupabaseClientForToken(accessToken: string) {
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
+  // NOTE: This module is imported by client components.
+  // To avoid client-bundle crashes, ONLY reference NEXT_PUBLIC_* env vars here.
+  const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").trim()
+  const supabaseAnonKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "").trim()
+  if (!supabaseUrl) throw new CreateSubscriptionError("Missing environment variable: NEXT_PUBLIC_SUPABASE_URL")
+  if (!supabaseAnonKey) throw new CreateSubscriptionError("Missing environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY")
+
   return createClient(supabaseUrl, supabaseAnonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },

@@ -111,21 +111,13 @@ export function getSupabaseAnonKey(): string | undefined {
 
 export function requireSupabaseUrl(): string {
   const v = getSupabaseUrl()
-  // Never crash the UI due to env issues; only throw on the server.
-  if (!v) {
-    if (!isServer()) return ""
-    throw new Error("Missing environment variable: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL).")
-  }
+  if (!v) throw new Error("Missing environment variable: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL).")
   return v
 }
 
 export function requireSupabaseAnonKey(): string {
   const v = getSupabaseAnonKey()
-  // Never crash the UI due to env issues; only throw on the server.
-  if (!v) {
-    if (!isServer()) return ""
-    throw new Error("Missing environment variable: SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).")
-  }
+  if (!v) throw new Error("Missing environment variable: SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY).")
   return v
 }
 
