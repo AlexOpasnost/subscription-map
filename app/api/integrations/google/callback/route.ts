@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 
 import { verifyIntegrationState } from "@/lib/integrations/state"
-import { normalizeAbsoluteUrl, requireServerEnv } from "@/lib/env"
+import { requireServerEnv } from "@/lib/env"
+import { getAppOriginFromRequest } from "@/lib/integrations/getAppOrigin"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
 const STATE_COOKIE = "sm_google_oauth_nonce"
@@ -16,22 +17,9 @@ function mergeMeta(prev: unknown, next: Record<string, unknown>): Record<string,
 
 export async function GET(req: NextRequest) {
   // Required env vars (server-only):
-  // - APP_URL
   // - GOOGLE_CLIENT_ID
   // - GOOGLE_CLIENT_SECRET
-  const originForErrors = req.nextUrl.origin
-  let appUrl = ""
-  try {
-    appUrl = normalizeAbsoluteUrl(
-      requireServerEnv("APP_URL", "Set it to your Vercel origin, e.g. https://subscription-map-six.vercel.app")
-    )
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "Missing APP_URL"
-    const redirectTo = new URL("/settings/integrations", originForErrors)
-    redirectTo.searchParams.set("error", "google:config")
-    redirectTo.searchParams.set("details", message.slice(0, 600))
-    return NextResponse.redirect(redirectTo)
-  }
+  const appUrl = getAppOriginFromRequest(req)
 
   const redirectTo = new URL("/settings/integrations", appUrl)
 

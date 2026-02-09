@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from "next/server"
 import crypto from "crypto"
 
 import { signIntegrationState } from "@/lib/integrations/state"
-import { normalizeAbsoluteUrl, requireServerEnv } from "@/lib/env"
+import { requireServerEnv } from "@/lib/env"
+import { getAppOriginFromRequest } from "@/lib/integrations/getAppOrigin"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 
@@ -67,12 +68,9 @@ export async function GET(req: NextRequest) {
   const originForErrors = req.nextUrl.origin
   try {
     // Required env vars (server-only):
-    // - APP_URL
     // - GOOGLE_CLIENT_ID
     // - GOOGLE_CLIENT_SECRET (used in callback / token exchange)
-    const appUrl = normalizeAbsoluteUrl(
-      requireServerEnv("APP_URL", "Set it to your Vercel origin, e.g. https://subscription-map-six.vercel.app")
-    )
+    const appUrl = getAppOriginFromRequest(req)
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
 
     const redirectUri = `${appUrl}/api/integrations/google/callback`
@@ -106,12 +104,9 @@ export async function POST(req: NextRequest) {
     const userId = await getUserIdFromAccessToken(token)
 
     // Required env vars (server-only):
-    // - APP_URL
     // - GOOGLE_CLIENT_ID
     // - GOOGLE_CLIENT_SECRET (used in callback / token exchange)
-    const appUrl = normalizeAbsoluteUrl(
-      requireServerEnv("APP_URL", "Set it to your Vercel origin, e.g. https://subscription-map-six.vercel.app")
-    )
+    const appUrl = getAppOriginFromRequest(req)
     const redirectUri = `${appUrl}/api/integrations/google/callback`
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
     const nonce = crypto.randomUUID()
@@ -133,7 +128,7 @@ export async function POST(req: NextRequest) {
       {
         error: message,
         hint:
-          "Required env vars: APP_URL, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.",
+          "Required env vars: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET. (APP_URL optional; origin can be inferred from request headers.)",
       },
       { status: 500 }
     )
