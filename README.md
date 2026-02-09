@@ -43,6 +43,11 @@ The integrations + async sync tables are added in:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional; default: `gpt-4.1-mini`)
 
+### Sentry (optional)
+
+- `SENTRY_DSN` (server)
+- `NEXT_PUBLIC_SENTRY_DSN` (client)
+
 Local dev:
 
 - Create `.env.local` and set `OPENAI_API_KEY=...`

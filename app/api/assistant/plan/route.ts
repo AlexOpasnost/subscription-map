@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server"
 import OpenAI from "openai"
+import crypto from "crypto"
+import { createClient } from "@supabase/supabase-js"
 
-import { requireServerEnv } from "@/lib/env"
+import { requireServerEnv, requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
 import { parsePlanSafe } from "@/lib/assistant/planSchema"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 
@@ -97,9 +99,10 @@ const SYSTEM_PROMPT = [
 export async function POST(req: NextRequest) {
   const token = getBearerToken(req)
   if (!token) return NextResponse.json({ error: "Not authenticated", plan: getFallbackPlan() }, { status: 401 })
+  let userId = ""
   try {
     // Validate token (keeps this endpoint protected and cost-contained).
-    await getUserIdFromAccessToken(token)
+    userId = await getUserIdFromAccessToken(token)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Not authenticated"
     return NextResponse.json({ error: msg, plan: getFallbackPlan() }, { status: 401 })
@@ -140,6 +143,30 @@ export async function POST(req: NextRequest) {
         { error: "Planner returned invalid JSON. Please rephrase.", plan: getFallbackPlan() },
         { status: 400 }
       )
+    }
+
+    // Best-effort usage logging (never blocks the response).
+    try {
+      const supabase = createClient(requireSupabaseUrl(), requireSupabaseAnonKey(), {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      })
+      const usage = (resp as any)?.usage ?? {}
+      const inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null
+      const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : null
+      const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null
+      const requestId = typeof (resp as any)?.id === "string" ? String((resp as any).id) : crypto.randomUUID()
+      await supabase.from("ai_usage").insert({
+        user_id: userId,
+        request_id: requestId,
+        model: model,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: totalTokens,
+        cost_usd: null,
+      })
+    } catch {
+      // ignore
     }
 
     const validated = parsePlanSafe(json)

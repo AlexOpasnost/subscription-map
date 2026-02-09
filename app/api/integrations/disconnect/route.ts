@@ -38,13 +38,21 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
 
-  // Remove integration + external links for the provider.
-  const [{ error: intErr }, { error: linkErr }] = await Promise.all([
-    supabase.from("integrations").delete().eq("user_id", user.id).eq("provider", provider),
+  // Prefer marking as disconnected (if `status` exists); fall back to delete for older schemas.
+  const [{ error: updErr }, { error: linkErr }] = await Promise.all([
+    supabase
+      .from("integrations")
+      .update({ status: "disconnected", access_token: "", refresh_token: null, expires_at: null })
+      .eq("user_id", user.id)
+      .eq("provider", provider),
     supabase.from("external_links").delete().eq("user_id", user.id).eq("provider", provider),
   ])
-  if (intErr) return NextResponse.json({ ok: false, error: intErr.message }, { status: 500 })
   if (linkErr) return NextResponse.json({ ok: false, error: linkErr.message }, { status: 500 })
+  if (updErr) {
+    // Older schema: delete the row entirely.
+    const { error: intErr } = await supabase.from("integrations").delete().eq("user_id", user.id).eq("provider", provider)
+    if (intErr) return NextResponse.json({ ok: false, error: intErr.message }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }

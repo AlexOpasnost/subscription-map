@@ -44,6 +44,7 @@ export default function IntegrationsPage() {
     connected: { google: boolean; notion: boolean }
     settings: { tasks: boolean; subscriptions: boolean; birthdays: boolean }
     notion: { databaseId: string }
+    google?: { status?: string; scopes?: string[] }
     lastSync: {
       google: { status: string; last_error: string | null; updated_at: string } | null
       notion: { status: string; last_error: string | null; updated_at: string } | null
@@ -68,6 +69,16 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/status", { headers: { Authorization: `Bearer ${token}` } })
       const json = (await res.json()) as any
       if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      // Optional: augment with Google connection status/scopes (non-blocking).
+      try {
+        const gRes = await fetch("/api/integrations/google/status", { headers: { Authorization: `Bearer ${token}` } })
+        const gJson = (await gRes.json()) as any
+        if (gRes.ok && gJson?.ok) {
+          json.google = { status: gJson.status, scopes: Array.isArray(gJson.scopes) ? gJson.scopes : [] }
+        }
+      } catch {
+        // ignore
+      }
       setStatus(json)
       setNotionDatabaseId(typeof json?.notion?.databaseId === "string" ? json.notion.databaseId : "")
     } catch (err: unknown) {
@@ -104,6 +115,20 @@ export default function IntegrationsPage() {
     }
   }, [router, toast])
 
+  function friendlyGoogleError(msg: string): string {
+    const s = msg.toLowerCase()
+    if (s.includes("access_denied")) {
+      return "Google OAuth was denied. If your app is in Testing mode, add your account as a Test user in Google Cloud."
+    }
+    if (s.includes("invalid_client")) {
+      return "Google OAuth client is misconfigured. Verify GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and the redirect URL in Google Cloud."
+    }
+    if (s.includes("workspace") || s.includes("admin")) {
+      return "Your Google Workspace admin may be blocking OAuth apps. Try a personal account or ask your admin to allow it."
+    }
+    return msg
+  }
+
   const startConnect = async (provider: Provider) => {
     if (!user) return
     if (busyProvider) return
@@ -130,7 +155,12 @@ export default function IntegrationsPage() {
       // Notion uses token+database connect below.
       toast({ title: "Notion setup", description: "Paste your Notion token + database ID below.", variant: "success" })
     } catch (err: unknown) {
-      toast({ title: "Couldn’t start OAuth", description: humanizeError(err), variant: "error" })
+      const raw = humanizeError(err)
+      toast({
+        title: "Couldn’t start OAuth",
+        description: provider === "google" ? friendlyGoogleError(raw) : raw,
+        variant: "error",
+      })
     } finally {
       setBusyProvider(null)
     }
@@ -276,6 +306,12 @@ export default function IntegrationsPage() {
                   {connected ? "Connected" : "Not connected"}
                 </span>
               </div>
+              {provider === "google" && connected && status?.google?.scopes && status.google.scopes.length ? (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Scopes: <span className="text-foreground/80">{status.google.scopes.slice(0, 3).join(", ")}</span>
+                  {status.google.scopes.length > 3 ? <span className="opacity-70"> +{status.google.scopes.length - 3} more</span> : null}
+                </div>
+              ) : null}
               {last ? (
                 <div className="mt-2 text-xs text-muted-foreground">
                   Last sync: <span className="text-foreground/80">{last.status}</span>{" "}

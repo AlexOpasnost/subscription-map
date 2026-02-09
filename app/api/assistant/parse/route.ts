@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server"
 import OpenAI from "openai"
+import crypto from "crypto"
+import { createClient } from "@supabase/supabase-js"
 
 import {
   normalizeAbsoluteUrl,
@@ -108,8 +110,9 @@ export async function POST(req: NextRequest) {
 
   const token = getBearerToken(req)
   if (!token) return NextResponse.json({ error: "Not authenticated", action: unsupported("Not authenticated") }, { status: 401 })
+  let userId = ""
   try {
-    await getUserIdFromAccessToken(token)
+    userId = await getUserIdFromAccessToken(token)
   } catch {
     return NextResponse.json({ error: "Not authenticated", action: unsupported("Not authenticated") }, { status: 401 })
   }
@@ -140,6 +143,30 @@ export async function POST(req: NextRequest) {
         { role: "user", content: text },
       ],
     })
+
+    // Best-effort usage logging (never blocks the response).
+    try {
+      const supabase = createClient(requireSupabaseUrl(), requireSupabaseAnonKey(), {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      })
+      const usage = (resp as any)?.usage ?? {}
+      const inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null
+      const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : null
+      const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null
+      const requestId = typeof (resp as any)?.id === "string" ? String((resp as any).id) : crypto.randomUUID()
+      await supabase.from("ai_usage").insert({
+        user_id: userId,
+        request_id: requestId,
+        model: model,
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        total_tokens: totalTokens,
+        cost_usd: null,
+      })
+    } catch {
+      // ignore
+    }
 
     const raw = String(resp.choices?.[0]?.message?.content ?? "").trim()
     const json = extractFirstJsonObject(raw)

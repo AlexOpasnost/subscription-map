@@ -17,6 +17,10 @@ Set these on Vercel (and in `.env.local` for local dev):
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY` (server-only; used for secure OAuth state signing and the sync runner)
 
+### Optional (Admin)
+
+- `ADMIN_EMAILS` (comma-separated list, e.g. `admin@example.com,alex@example.com`)
+
 ### Required (Google Calendar OAuth)
 
 - `GOOGLE_CLIENT_ID`

@@ -131,22 +131,48 @@ export async function GET(req: NextRequest) {
       scopes: scope ? scope.split(/\s+/).filter(Boolean) : undefined,
       calendar_id: "primary",
     })
+    const scopesArr = scope ? scope.split(/\s+/).filter(Boolean) : null
 
-    const { error: upsertError } = await supabase
+    // Prefer new schema (status + scopes). If migration hasn't been applied yet, retry without them.
+    let upsertError: any = null
+    ;({ error: upsertError } = await supabase
       .from("integrations")
       .upsert(
         {
           user_id: parsedState.userId,
           provider: "google",
+          status: "connected",
           access_token: accessToken,
           refresh_token: refreshToken ?? existing?.refresh_token ?? null,
           expires_at: expiresAt,
           scope: scope ?? null,
+          scopes: scopesArr,
           meta: nextMeta,
           metadata: nextMetadata,
         },
         { onConflict: "user_id,provider" }
-      )
+      ))
+
+    if (upsertError) {
+      const msg = typeof upsertError?.message === "string" ? upsertError.message : ""
+      if (msg.toLowerCase().includes("column") && (msg.toLowerCase().includes("status") || msg.toLowerCase().includes("scopes"))) {
+        ;({ error: upsertError } = await supabase
+          .from("integrations")
+          .upsert(
+            {
+              user_id: parsedState.userId,
+              provider: "google",
+              access_token: accessToken,
+              refresh_token: refreshToken ?? existing?.refresh_token ?? null,
+              expires_at: expiresAt,
+              scope: scope ?? null,
+              meta: nextMeta,
+              metadata: nextMetadata,
+            },
+            { onConflict: "user_id,provider" }
+          ))
+      }
+    }
 
     if (upsertError) {
       redirectTo.searchParams.set("error", "google:store_failed")

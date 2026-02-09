@@ -51,7 +51,8 @@ function buildGoogleOauthUrl(input: { userId: string; redirectUri: string; clien
   url.searchParams.set("response_type", "code")
   url.searchParams.set("scope", scope)
   url.searchParams.set("access_type", "offline")
-  if (input.prompt) url.searchParams.set("prompt", "consent")
+  // Production-grade: always prompt=consent to maximize refresh_token reliability.
+  url.searchParams.set("prompt", "consent")
   url.searchParams.set("include_granted_scopes", "true")
   url.searchParams.set("state", state)
   return url
