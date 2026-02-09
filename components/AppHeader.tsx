@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Bot, CalendarDays, List, LogOut, Map, Plug } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import BrandLink from "@/components/BrandLink"
 
 type AppHeaderProps = {
@@ -25,43 +25,53 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
 
         <div className="flex items-center gap-1 shrink-0">
           {currentPage !== "integrations" ? (
-            <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="Integrations">
-              <Link href="/settings/integrations">
-                <Plug className="h-4 w-4" />
-              </Link>
-            </Button>
+            <Link
+              href="/settings/integrations"
+              aria-label="Integrations"
+              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
+            >
+              <Plug className="h-4 w-4" />
+            </Link>
           ) : null}
 
           {currentPage !== "assistant" ? (
-            <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="Assistant">
-              <Link href="/assistant">
-                <Bot className="h-4 w-4" />
-              </Link>
-            </Button>
+            <Link
+              href="/assistant"
+              aria-label="Assistant"
+              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
+            >
+              <Bot className="h-4 w-4" />
+            </Link>
           ) : null}
 
           {currentPage !== "timeline" ? (
-            <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="Timeline">
-              <Link href="/app/timeline">
-                <CalendarDays className="h-4 w-4" />
-              </Link>
-            </Button>
+            <Link
+              href="/app/timeline"
+              aria-label="Timeline"
+              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
+            >
+              <CalendarDays className="h-4 w-4" />
+            </Link>
           ) : null}
 
           {currentPage !== "map" ? (
-            <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="View map">
-              <Link href="/app/map">
-                <Map className="h-4 w-4" />
-              </Link>
-            </Button>
+            <Link
+              href="/app/map"
+              aria-label="View map"
+              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
+            >
+              <Map className="h-4 w-4" />
+            </Link>
           ) : null}
 
           {currentPage !== "subscriptions" ? (
-            <Button asChild variant="ghost" size="sm" className="h-9 w-9 p-0" aria-label="Subscriptions">
-              <Link href="/app">
-                <List className="h-4 w-4" />
-              </Link>
-            </Button>
+            <Link
+              href="/app"
+              aria-label="Subscriptions"
+              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
+            >
+              <List className="h-4 w-4" />
+            </Link>
           ) : null}
 
           <Button
