@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { getAppOrigin } from "@/lib/integrations/getAppOrigin"
 import { verifyIntegrationState } from "@/lib/integrations/state"
 import { requireServerEnv } from "@/lib/env"
-import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { supabaseServer } from "@/lib/supabase/server"
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -49,6 +49,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(redirectTo)
     }
 
+    const supabase = await supabaseServer()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) {
+      redirectTo.searchParams.set("error", "notion:not_authenticated")
+      redirectTo.searchParams.set("details", "Sign in again and retry connecting Notion.")
+      return NextResponse.redirect(redirectTo)
+    }
+    if (user.id !== parsedState.userId) {
+      redirectTo.searchParams.set("error", "notion:user_mismatch")
+      redirectTo.searchParams.set("details", "Signed-in user does not match OAuth state. Please retry connecting Notion.")
+      return NextResponse.redirect(redirectTo)
+    }
+
     const clientId = requireServerEnv("NOTION_CLIENT_ID")
     const clientSecret = requireServerEnv("NOTION_CLIENT_SECRET")
     const redirectUri = `${appOrigin}/api/integrations/notion/callback`
@@ -89,7 +104,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(redirectTo)
     }
 
-    const supabase = getSupabaseAdmin()
     const { data: existing } = await supabase
       .from("integrations")
       .select("id,meta,metadata")
@@ -97,13 +111,16 @@ export async function GET(req: NextRequest) {
       .eq("provider", "notion")
       .maybeSingle()
 
-    const nextMeta = mergeMeta(existing?.meta, {
+    const prevMeta = isRecord(existing) ? existing["meta"] : undefined
+    const prevMetadata = isRecord(existing) ? existing["metadata"] : undefined
+
+    const nextMeta = mergeMeta(prevMeta, {
       provider: "notion",
       workspace_id: workspaceId,
       workspace_name: workspaceName,
       bot_id: botId,
     })
-    const nextMetadata = mergeMeta((existing as any)?.metadata ?? existing?.meta, {
+    const nextMetadata = mergeMeta(prevMetadata ?? prevMeta, {
       provider: "notion",
       workspace_id: workspaceId,
       workspace_name: workspaceName,

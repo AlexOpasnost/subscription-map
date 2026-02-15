@@ -1,13 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
+import { supabaseServer } from "@/lib/supabase/server"
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -18,9 +10,6 @@ function mergeMeta(prev: unknown, next: Record<string, unknown>): Record<string,
 }
 
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
   let body: unknown
   try {
     body = (await req.json()) as unknown
@@ -28,7 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const sync = isRecord((body as any)?.sync) ? ((body as any).sync as Record<string, unknown>) : null
+  const sync = isRecord(body) && isRecord(body.sync) ? body.sync : null
   if (!sync) {
     return NextResponse.json({ ok: false, error: "Missing sync settings" }, { status: 400 })
   }
@@ -38,18 +27,11 @@ export async function POST(req: NextRequest) {
     birthdays: typeof sync.birthdays === "boolean" ? sync.birthdays : true,
   }
 
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
-
+  const supabase = await supabaseServer()
   const {
     data: { user },
-    error: authError,
   } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
+  if (!user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
 
   const { data: integrations, error: integrationsError } = await supabase
     .from("integrations")
@@ -63,10 +45,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, updated: 0, settings: nextSync })
   }
 
-  for (const row of rows as any[]) {
-    const nextMeta = mergeMeta(row.meta, { sync: nextSync })
-    const nextMetadata = mergeMeta(row.metadata ?? row.meta, { sync: nextSync })
-    const { error } = await supabase.from("integrations").update({ meta: nextMeta, metadata: nextMetadata }).eq("id", row.id)
+  for (const row of rows) {
+    if (!isRecord(row)) continue
+    const nextMeta = mergeMeta(row["meta"], { sync: nextSync })
+    const nextMetadata = mergeMeta(row["metadata"] ?? row["meta"], { sync: nextSync })
+    const id = typeof row["id"] === "string" ? row["id"] : ""
+    if (!id) continue
+    const { error } = await supabase.from("integrations").update({ meta: nextMeta, metadata: nextMetadata }).eq("id", id)
     if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 

@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 
 // IMPORTANT:
 // This module is used in the browser, so it MUST ONLY reference NEXT_PUBLIC_* env vars.
@@ -19,11 +19,5 @@ if (!supabaseAnonKey) {
   throw new Error("Missing environment variable: NEXT_PUBLIC_SUPABASE_ANON_KEY")
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-})
+export const supabase = createBrowserClient(supabaseUrl, supabaseAnonKey)
 

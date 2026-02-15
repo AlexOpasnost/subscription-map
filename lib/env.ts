@@ -93,6 +93,13 @@ export function normalizeAbsoluteUrl(input: string): string {
   return `https://${raw}`
 }
 
+export function requireAppUrlOrigin(): string {
+  // Production requires APP_URL; keep errors explicit.
+  return normalizeAbsoluteUrl(
+    requireServerEnv("APP_URL", "Set it to your deployment origin, e.g. https://subscription-map-six.vercel.app")
+  )
+}
+
 /**
  * Supabase env helpers (safe fallbacks).
  *

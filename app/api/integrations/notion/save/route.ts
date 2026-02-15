@@ -1,14 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { getSupabaseAdmin } from "@/lib/supabase/admin"
-import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
+import { supabaseServer } from "@/lib/supabase/server"
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -35,9 +27,6 @@ async function notionRequest(accessToken: string, path: string): Promise<unknown
 }
 
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
   let body: unknown
   try {
     body = (await req.json()) as unknown
@@ -45,29 +34,26 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const notionToken = typeof (body as any)?.token === "string" ? String((body as any).token).trim() : ""
-  const databaseId = typeof (body as any)?.databaseId === "string" ? String((body as any).databaseId).trim() : ""
+  const notionToken = isRecord(body) && typeof body.token === "string" ? body.token.trim() : ""
+  const databaseId = isRecord(body) && typeof body.databaseId === "string" ? body.databaseId.trim() : ""
 
   if (!notionToken) return NextResponse.json({ ok: false, error: "Missing Notion token" }, { status: 400 })
   if (!databaseId) return NextResponse.json({ ok: false, error: "Missing Notion databaseId" }, { status: 400 })
 
-  let userId: string
-  try {
-    userId = await getUserIdFromAccessToken(token)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Not authenticated"
-    return NextResponse.json({ ok: false, error: msg }, { status: 401 })
-  }
+  const supabase = await supabaseServer()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
 
   try {
     // Validate token + database access (server-side).
     await notionRequest(notionToken, `/databases/${databaseId}`)
 
-    const supabase = getSupabaseAdmin()
     const { data: existing, error: existingError } = await supabase
       .from("integrations")
       .select("id,meta,metadata")
-      .eq("user_id", userId)
+      .eq("user_id", user.id)
       .eq("provider", "notion")
       .maybeSingle()
 
@@ -86,7 +72,7 @@ export async function POST(req: NextRequest) {
       .from("integrations")
       .upsert(
         {
-          user_id: userId,
+          user_id: user.id,
           provider: "notion",
           access_token: notionToken,
           refresh_token: null,

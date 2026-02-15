@@ -1,18 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
+import { supabaseServer } from "@/lib/supabase/server"
 
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null
 }
 
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
   let body: unknown
   try {
     body = (await req.json()) as unknown
@@ -20,23 +13,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 })
   }
 
-  const provider = typeof (body as any)?.provider === "string" ? String((body as any).provider).trim() : ""
+  const provider = isRecord(body) && typeof body.provider === "string" ? body.provider.trim() : ""
   if (provider !== "google" && provider !== "notion") {
     return NextResponse.json({ ok: false, error: "Invalid provider" }, { status: 400 })
   }
 
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
-
+  const supabase = await supabaseServer()
   const {
     data: { user },
-    error: authError,
   } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
+  if (!user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
 
   // Prefer marking as disconnected (if `status` exists); fall back to delete for older schemas.
   const [{ error: updErr }, { error: linkErr }] = await Promise.all([

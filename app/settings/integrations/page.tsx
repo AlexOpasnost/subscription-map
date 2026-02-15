@@ -41,6 +41,7 @@ export default function IntegrationsPage() {
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [status, setStatus] = useState<{
+    ok?: boolean
     connected: { google: boolean; notion: boolean }
     settings: { tasks: boolean; subscriptions: boolean; birthdays: boolean }
     notion: { databaseId: string }
@@ -50,6 +51,26 @@ export default function IntegrationsPage() {
       notion: { status: string; last_error: string | null; updated_at: string } | null
     }
   } | null>(null)
+
+  function apiError(json: unknown, res: Response): string {
+    if (isRecord(json) && typeof json.error === "string" && json.error.trim()) return json.error
+    return `HTTP ${res.status}`
+  }
+
+  function isStatusPayload(v: unknown): v is NonNullable<typeof status> {
+    if (!isRecord(v)) return false
+    if (!isRecord(v.connected)) return false
+    if (typeof v.connected.google !== "boolean") return false
+    if (typeof v.connected.notion !== "boolean") return false
+    if (!isRecord(v.settings)) return false
+    if (typeof v.settings.tasks !== "boolean") return false
+    if (typeof v.settings.subscriptions !== "boolean") return false
+    if (typeof v.settings.birthdays !== "boolean") return false
+    if (!isRecord(v.notion)) return false
+    if (typeof v.notion.databaseId !== "string") return false
+    if (!isRecord(v.lastSync)) return false
+    return true
+  }
 
   const providers = useMemo(() => {
     return {
@@ -62,25 +83,24 @@ export default function IntegrationsPage() {
     if (!user) return
     setLoading(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) throw new Error("You’re signed out. Please sign in again.")
-
-      const res = await fetch("/api/integrations/status", { headers: { Authorization: `Bearer ${token}` } })
-      const json = (await res.json()) as any
-      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      const res = await fetch("/api/integrations/status")
+      const json: unknown = await res.json()
+      if (!res.ok || !(isRecord(json) && json.ok === true) || !isStatusPayload(json)) throw new Error(apiError(json, res))
       // Optional: augment with Google connection status/scopes (non-blocking).
       try {
-        const gRes = await fetch("/api/integrations/google/status", { headers: { Authorization: `Bearer ${token}` } })
-        const gJson = (await gRes.json()) as any
-        if (gRes.ok && gJson?.ok) {
-          json.google = { status: gJson.status, scopes: Array.isArray(gJson.scopes) ? gJson.scopes : [] }
+        const gRes = await fetch("/api/integrations/google/status")
+        const gJson: unknown = await gRes.json()
+        if (gRes.ok && isRecord(gJson) && gJson.ok === true) {
+          ;(json as NonNullable<typeof status>).google = {
+            status: typeof gJson.status === "string" ? gJson.status : undefined,
+            scopes: Array.isArray(gJson.scopes) ? gJson.scopes.map(String) : [],
+          }
         }
       } catch {
         // ignore
       }
       setStatus(json)
-      setNotionDatabaseId(typeof json?.notion?.databaseId === "string" ? json.notion.databaseId : "")
+      setNotionDatabaseId(json.notion.databaseId)
     } catch (err: unknown) {
       const msg = humanizeError(err)
       toast({ title: "Couldn’t load integrations", description: msg, variant: "error" })
@@ -136,20 +156,13 @@ export default function IntegrationsPage() {
     try {
       if (provider === "google") {
         // Start OAuth server-side (keeps userId tied to the current session).
-        const { data: sessionData } = await supabase.auth.getSession()
-        const token = sessionData.session?.access_token
-        if (!token) throw new Error("You’re signed out. Please sign in again.")
-
         const res = await fetch("/api/integrations/google/start", {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
         })
-        const json = (await res.json()) as any
-        if (!res.ok || typeof json?.url !== "string" || !json.url) {
-          const msg = typeof json?.error === "string" ? json.error : `HTTP ${res.status}`
-          throw new Error(msg)
-        }
-        window.location.href = json.url
+        const json: unknown = await res.json()
+        const url = isRecord(json) && typeof json.url === "string" ? json.url : ""
+        if (!res.ok || !url) throw new Error(apiError(json, res))
+        window.location.href = url
         return
       }
       // Notion uses token+database connect below.
@@ -171,17 +184,13 @@ export default function IntegrationsPage() {
     if (busyProvider) return
     setBusyProvider(provider)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) throw new Error("You’re signed out. Please sign in again.")
-
       const res = await fetch("/api/integrations/disconnect", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider }),
       })
-      const json = (await res.json()) as any
-      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      const json: unknown = await res.json()
+      if (!res.ok || !(isRecord(json) && json.ok === true)) throw new Error(apiError(json, res))
       toast({ title: "Disconnected", variant: "success" })
       await load()
     } catch (err: unknown) {
@@ -206,17 +215,13 @@ export default function IntegrationsPage() {
     }
     setSavingNotion(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) throw new Error("You’re signed out. Please sign in again.")
-
       const res = await fetch("/api/integrations/notion/save", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: tok, databaseId: dbId }),
       })
-      const json = (await res.json()) as any
-      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      const json: unknown = await res.json()
+      if (!res.ok || !(isRecord(json) && json.ok === true)) throw new Error(apiError(json, res))
 
       toast({ title: "Connected", description: "Notion settings saved.", variant: "success" })
       setNotionToken("")
@@ -234,16 +239,13 @@ export default function IntegrationsPage() {
     if (!status) return
     setSettingsSaving(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) throw new Error("You’re signed out. Please sign in again.")
       const res = await fetch("/api/integrations/settings", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sync: status.settings }),
       })
-      const json = (await res.json()) as any
-      if (!res.ok || !json.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
+      const json: unknown = await res.json()
+      if (!res.ok || !(isRecord(json) && json.ok === true)) throw new Error(apiError(json, res))
       toast({ title: "Saved", description: "Sync preferences updated.", variant: "success" })
       await load()
     } catch (err: unknown) {
@@ -262,9 +264,10 @@ export default function IntegrationsPage() {
       const token = sessionData.session?.access_token
       if (!token) throw new Error("You’re signed out. Please sign in again.")
       const res = await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
-      const json = (await res.json()) as any
-      if (!res.ok) throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)
-      toast({ title: "Sync run started", description: `Processed ${json.processed ?? 0} jobs.`, variant: "success" })
+      const json: unknown = await res.json()
+      if (!res.ok) throw new Error(apiError(json, res))
+      const processed = isRecord(json) && typeof json.processed === "number" ? json.processed : 0
+      toast({ title: "Sync run started", description: `Processed ${processed} jobs.`, variant: "success" })
       await load()
     } catch (err: unknown) {
       toast({ title: "Sync failed", description: humanizeError(err), variant: "error" })
@@ -455,13 +458,13 @@ export default function IntegrationsPage() {
                   <div key={x.key} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <div className="text-sm text-foreground/90">{x.label}</div>
                     <Checkbox
-                      checked={Boolean((status.settings as any)[x.key])}
+                      checked={Boolean(status.settings[x.key])}
                       onChange={() =>
                         setStatus((s) =>
                           s
                             ? {
                                 ...s,
-                                settings: { ...s.settings, [x.key]: !Boolean((s.settings as any)[x.key]) } as any,
+                                settings: { ...s.settings, [x.key]: !Boolean(s.settings[x.key]) },
                               }
                             : s
                         )
