@@ -83,12 +83,12 @@ export default function IntegrationsPage() {
     if (!user) return
     setLoading(true)
     try {
-      const res = await fetch("/api/integrations/status")
+      const res = await fetch("/api/integrations/status", { credentials: "include" })
       const json: unknown = await res.json()
       if (!res.ok || !(isRecord(json) && json.ok === true) || !isStatusPayload(json)) throw new Error(apiError(json, res))
       // Optional: augment with Google connection status/scopes (non-blocking).
       try {
-        const gRes = await fetch("/api/integrations/google/status")
+        const gRes = await fetch("/api/integrations/google/status", { credentials: "include" })
         const gJson: unknown = await gRes.json()
         if (gRes.ok && isRecord(gJson) && gJson.ok === true) {
           ;(json as NonNullable<typeof status>).google = {
@@ -158,6 +158,7 @@ export default function IntegrationsPage() {
         // Start OAuth server-side (keeps userId tied to the current session).
         const res = await fetch("/api/integrations/google/start", {
           method: "POST",
+          credentials: "include",
         })
         const json: unknown = await res.json()
         const url = isRecord(json) && typeof json.url === "string" ? json.url : ""
@@ -187,6 +188,7 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/disconnect", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ provider }),
       })
       const json: unknown = await res.json()
@@ -218,6 +220,7 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/notion/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ token: tok, databaseId: dbId }),
       })
       const json: unknown = await res.json()
@@ -242,6 +245,7 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ sync: status.settings }),
       })
       const json: unknown = await res.json()

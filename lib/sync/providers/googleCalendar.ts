@@ -9,20 +9,30 @@ function getEnv(name: string): string {
   return v
 }
 
-async function refreshGoogleAccessToken(integration: IntegrationRow): Promise<{ accessToken: string; expiresAtIso: string }> {
-  const refreshToken = integration.refresh_token
-  if (!refreshToken) throw new Error("Google refresh_token is missing; please reconnect Google Calendar.")
+type OAuthTokenRow = {
+  id: string
+  user_id: string
+  provider: string
+  access_token: string
+  refresh_token: string | null
+  expires_at: string | null
+  scope: string | null
+}
+
+async function refreshGoogleAccessToken(input: { userId: string; refreshToken: string }): Promise<{ accessToken: string; expiresAtIso: string }> {
+  if (!input.refreshToken) throw new Error("Missing refresh token")
 
   const clientId = getEnv("GOOGLE_CLIENT_ID")
   const clientSecret = getEnv("GOOGLE_CLIENT_SECRET")
 
+  console.log(`[googleCalendar] refresh attempt user_id=${input.userId}`)
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       client_id: clientId,
       client_secret: clientSecret,
-      refresh_token: refreshToken,
+      refresh_token: input.refreshToken,
       grant_type: "refresh_token",
     }).toString(),
   })
@@ -43,24 +53,31 @@ async function refreshGoogleAccessToken(integration: IntegrationRow): Promise<{ 
 
 async function ensureGoogleAccessToken(
   supabase: SupabaseClient,
-  integration: IntegrationRow
-): Promise<{ accessToken: string; integration: IntegrationRow }> {
-  const expiresAt = integration.expires_at ? new Date(integration.expires_at).getTime() : null
+  tokens: OAuthTokenRow
+): Promise<{ accessToken: string; tokens: OAuthTokenRow }> {
+  const expiresAt = tokens.expires_at ? new Date(tokens.expires_at).getTime() : null
   const now = Date.now()
-  const needsRefresh = expiresAt !== null && Number.isFinite(expiresAt) && expiresAt - now < 60_000
+  const needsRefresh = expiresAt === null || !Number.isFinite(expiresAt) || expiresAt - now < 60_000
 
-  if (!needsRefresh) return { accessToken: integration.access_token, integration }
+  if (!needsRefresh) return { accessToken: tokens.access_token, tokens }
 
-  const { accessToken, expiresAtIso } = await refreshGoogleAccessToken(integration)
+  console.log(`[googleCalendar] token expired user_id=${tokens.user_id} expires_at=${tokens.expires_at ?? ""}`)
+  const refreshToken = tokens.refresh_token?.trim() ?? ""
+  if (!refreshToken) {
+    console.warn(`[googleCalendar] token missing refresh_token user_id=${tokens.user_id}`)
+    throw new Error("Missing refresh token")
+  }
+
+  const { accessToken, expiresAtIso } = await refreshGoogleAccessToken({ userId: tokens.user_id, refreshToken })
   const { data, error } = await supabase
-    .from("integrations")
+    .from("oauth_tokens")
     .update({ access_token: accessToken, expires_at: expiresAtIso })
-    .eq("id", integration.id)
-    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at")
+    .eq("id", tokens.id)
+    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope")
     .single()
 
   if (error) throw error
-  return { accessToken, integration: data as IntegrationRow }
+  return { accessToken, tokens: data as OAuthTokenRow }
 }
 
 async function googleCalendarRequest(
@@ -181,7 +198,19 @@ export async function pushToGoogleCalendar(
 ): Promise<void> {
   const meta = getObject(integration.metadata ?? integration.meta)
   const calendarId = getString(meta.calendar_id) || "primary"
-  const ensured = await ensureGoogleAccessToken(supabase, integration)
+  const { data: tokens, error: tokenErr } = await supabase
+    .from("oauth_tokens")
+    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope")
+    .eq("user_id", integration.user_id)
+    .eq("provider", "google")
+    .maybeSingle()
+  if (tokenErr) throw tokenErr
+  if (!tokens) {
+    console.warn(`[googleCalendar] token missing (oauth_tokens) user_id=${integration.user_id}`)
+    throw new Error("Google tokens not found")
+  }
+
+  const ensured = await ensureGoogleAccessToken(supabase, tokens as OAuthTokenRow)
   const accessToken = ensured.accessToken
 
   const userId = integration.user_id

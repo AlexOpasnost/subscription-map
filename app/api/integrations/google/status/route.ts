@@ -13,6 +13,14 @@ export async function GET() {
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
 
+  const { data: token, error: tokenError } = await supabase
+    .from("oauth_tokens")
+    .select("id,expires_at,scope,refresh_token")
+    .eq("user_id", user.id)
+    .eq("provider", "google")
+    .maybeSingle()
+  if (tokenError) return NextResponse.json({ ok: false, error: tokenError.message }, { status: 500 })
+
   const errorMessage = (e: unknown): string => {
     if (isRecord(e) && typeof e.message === "string") return e.message
     return "Failed to load status"
@@ -64,7 +72,7 @@ export async function GET() {
 
   const scopes = (scopesArr && scopesArr.length ? scopesArr : scopesFromMeta && scopesFromMeta.length ? scopesFromMeta : scopeStr ? scopeStr.split(/\s+/) : []).filter(Boolean)
 
-  const connected = Boolean(data) && (status ? status !== "disconnected" : true)
+  const connected = Boolean(token) && Boolean(data) && (status ? status !== "disconnected" : true)
 
   // TEMP DEBUG LOGGING (remove after verification)
   console.log(`[integrations/google/status] user.id=${user.id} connected=${connected} expires_at=${String(row.expires_at ?? "")}`)
@@ -74,7 +82,9 @@ export async function GET() {
     connected,
     status: status || (connected ? "connected" : "disconnected"),
     scopes,
-    expires_at: typeof row.expires_at === "string" ? row.expires_at : null,
+    expires_at:
+      (isRecord(token) && typeof token["expires_at"] === "string" ? token["expires_at"] : null) ??
+      (typeof row.expires_at === "string" ? row.expires_at : null),
   })
 }
 

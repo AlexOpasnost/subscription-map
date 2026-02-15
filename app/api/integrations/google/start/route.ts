@@ -19,7 +19,7 @@ async function shouldPromptForConsent(supabase: SupabaseServerClient, userId: st
   // This reduces needless re-consent while still ensuring we capture refresh_token when needed.
   try {
     const { data, error } = await supabase
-      .from("integrations")
+      .from("oauth_tokens")
       .select("refresh_token")
       .eq("user_id", userId)
       .eq("provider", "google")

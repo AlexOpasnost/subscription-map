@@ -26,6 +26,15 @@ export async function GET() {
   // TEMP DEBUG LOGGING (remove after verification)
   console.log(`[integrations/status] user.id=${user.id}`)
 
+  // Tokens source of truth (google): avoid "Connected" UI if oauth_tokens is empty.
+  const { data: googleToken, error: googleTokenError } = await supabase
+    .from("oauth_tokens")
+    .select("id,refresh_token,expires_at")
+    .eq("user_id", user.id)
+    .eq("provider", "google")
+    .maybeSingle()
+  if (googleTokenError) return NextResponse.json({ ok: false, error: googleTokenError.message }, { status: 500 })
+
   const { data: integrations, error: integrationsError } = await supabase
     .from("integrations")
     .select("provider,meta,metadata,created_at,expires_at")
@@ -47,6 +56,9 @@ export async function GET() {
     const meta = isRecord(row) ? (row.metadata ?? row.meta ?? {}) : {}
     providerMeta[provider] = meta
   }
+
+  // Override Google connected based on oauth_tokens (single source of truth).
+  if (!googleToken) connectedProviders.delete("google")
 
   // Determine sync settings from any integration row (prefer google -> notion -> defaults).
   const settings = (() => {
@@ -92,6 +104,12 @@ export async function GET() {
     lastSync: {
       google: lastByProvider.google ?? null,
       notion: lastByProvider.notion ?? null,
+    },
+    google: {
+      token: {
+        hasRefreshToken: Boolean(isRecord(googleToken) && typeof googleToken["refresh_token"] === "string" && googleToken["refresh_token"].trim()),
+        expires_at: isRecord(googleToken) && typeof googleToken["expires_at"] === "string" ? googleToken["expires_at"] : null,
+      },
     },
   })
 }

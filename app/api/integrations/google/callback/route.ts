@@ -119,15 +119,22 @@ export async function GET(req: NextRequest) {
     // TEMP DEBUG LOGGING (remove after verification)
     console.log(`[integrations/google/callback] user.id=${user.id} expires_at=${expiresAt} has_refresh_token=${Boolean(refreshToken)}`)
 
-    const { data: existing } = await supabase
+    const { data: existingIntegration } = await supabase
       .from("integrations")
-      .select("id,refresh_token,meta,metadata")
+      .select("id,meta,metadata")
       .eq("user_id", parsedState.userId)
       .eq("provider", "google")
       .maybeSingle()
 
-    const prevMeta = isRecord(existing) ? existing["meta"] : undefined
-    const prevMetadata = isRecord(existing) ? existing["metadata"] : undefined
+    const { data: existingToken } = await supabase
+      .from("oauth_tokens")
+      .select("id,refresh_token")
+      .eq("user_id", parsedState.userId)
+      .eq("provider", "google")
+      .maybeSingle()
+
+    const prevMeta = isRecord(existingIntegration) ? existingIntegration["meta"] : undefined
+    const prevMetadata = isRecord(existingIntegration) ? existingIntegration["metadata"] : undefined
 
     const nextMeta = mergeMeta(prevMeta, {
       provider: "google",
@@ -141,36 +148,65 @@ export async function GET(req: NextRequest) {
     })
     const scopesArr = scope ? scope.split(/\s+/).filter(Boolean) : null
 
-    // Prefer new schema (status + scopes). If migration hasn't been applied yet, retry without them.
-    let upsertError: { message?: string } | null = null
-    {
-      const res = await supabase.from("integrations").upsert(
-        {
-          user_id: parsedState.userId,
-          provider: "google",
-          status: "connected",
-          access_token: accessToken,
-          refresh_token: refreshToken ?? (isRecord(existing) && typeof existing["refresh_token"] === "string" ? existing["refresh_token"] : null),
-          expires_at: expiresAt,
-          scope: scope ?? null,
-          scopes: scopesArr,
-          meta: nextMeta,
-          metadata: nextMetadata,
-        },
-        { onConflict: "user_id,provider" }
-      )
-      upsertError = (res.error as { message?: string } | null) ?? null
+    // 1) oauth_tokens is the source of truth for Google tokens.
+    // Only update refresh_token if Google returned it; otherwise keep existing DB value.
+    if (existingToken && isRecord(existingToken) && typeof existingToken["id"] === "string") {
+      const update: Record<string, unknown> = {
+        access_token: accessToken,
+        expires_at: expiresAt,
+        scope: scope ?? null,
+      }
+      if (refreshToken) update.refresh_token = refreshToken
+
+      const { error: tokenUpdateError } = await supabase.from("oauth_tokens").update(update).eq("id", existingToken["id"])
+      if (tokenUpdateError) throw tokenUpdateError
+    } else {
+      const { error: tokenInsertError } = await supabase.from("oauth_tokens").insert({
+        user_id: parsedState.userId,
+        provider: "google",
+        access_token: accessToken,
+        refresh_token: refreshToken ?? null,
+        expires_at: expiresAt,
+        scope: scope ?? null,
+      })
+      if (tokenInsertError) throw tokenInsertError
     }
 
-    if (upsertError) {
-      const msg = typeof upsertError?.message === "string" ? upsertError.message : ""
+    const finalRefreshToken =
+      refreshToken ??
+      (isRecord(existingToken) && typeof existingToken["refresh_token"] === "string" ? existingToken["refresh_token"] : null)
+    if (!finalRefreshToken) console.warn(`[integrations/google/callback] missing refresh_token after connect; user_id=${user.id}`)
+
+    // 2) integrations tracks connection status + metadata only (no tokens).
+    const integrationsUpsertBase = {
+      user_id: parsedState.userId,
+      provider: "google",
+      status: "connected",
+      expires_at: expiresAt,
+      scopes: scopesArr,
+      meta: nextMeta,
+      metadata: nextMetadata,
+      // Keep tokens OUT of integrations. access_token is NOT NULL in older schemas, so store empty string.
+      access_token: "",
+      refresh_token: null,
+      scope: scope ?? null,
+    }
+
+    // Prefer new schema columns; fall back for older schemas.
+    let integrationsError: { message?: string } | null = null
+    {
+      const res = await supabase.from("integrations").upsert(integrationsUpsertBase, { onConflict: "user_id,provider" })
+      integrationsError = (res.error as { message?: string } | null) ?? null
+    }
+    if (integrationsError) {
+      const msg = typeof integrationsError.message === "string" ? integrationsError.message : ""
       if (msg.toLowerCase().includes("column") && (msg.toLowerCase().includes("status") || msg.toLowerCase().includes("scopes"))) {
         const res = await supabase.from("integrations").upsert(
           {
             user_id: parsedState.userId,
             provider: "google",
-            access_token: accessToken,
-            refresh_token: refreshToken ?? (isRecord(existing) && typeof existing["refresh_token"] === "string" ? existing["refresh_token"] : null),
+            access_token: "",
+            refresh_token: null,
             expires_at: expiresAt,
             scope: scope ?? null,
             meta: nextMeta,
@@ -178,29 +214,10 @@ export async function GET(req: NextRequest) {
           },
           { onConflict: "user_id,provider" }
         )
-        upsertError = (res.error as { message?: string } | null) ?? null
+        integrationsError = (res.error as { message?: string } | null) ?? null
       }
     }
-
-    if (upsertError) {
-      redirectTo.searchParams.set("error", "google:store_failed")
-      redirectTo.searchParams.set("details", typeof upsertError.message === "string" ? upsertError.message : "Unknown error")
-      const res = NextResponse.redirect(redirectTo)
-      res.cookies.set(STATE_COOKIE, "", {
-        httpOnly: true,
-        secure: appUrl.startsWith("https://"),
-        sameSite: "lax",
-        path: "/api/integrations/google/callback",
-        maxAge: 0,
-      })
-      return res
-    }
-
-    const finalRefreshToken = refreshToken ?? existing?.refresh_token ?? null
-    if (!finalRefreshToken) {
-      // TEMP DEBUG LOGGING (remove after verification)
-      console.warn(`[integrations/google/callback] missing refresh_token after connect; user_id=${user.id}`)
-    }
+    if (integrationsError) throw integrationsError
 
     redirectTo.searchParams.set("connected", "google")
     const res = NextResponse.redirect(redirectTo)

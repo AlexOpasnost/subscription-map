@@ -72,32 +72,45 @@ export async function GET(req: NextRequest) {
     const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null
     const supabase = getSupabaseAdmin()
 
-    // Upsert into oauth_tokens (requested)
-    const { error: upsertTokenError } = await supabase
+    // oauth_tokens is the source of truth for Google tokens.
+    // Only update refresh_token if Google returned it; otherwise keep existing DB value.
+    const { data: existingToken } = await supabase
       .from("oauth_tokens")
-      .upsert(
-        {
-          user_id: userId,
-          provider: "google",
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_at: expiresAt,
-          scope,
-        },
-        { onConflict: "user_id,provider" }
-      )
+      .select("id,refresh_token")
+      .eq("user_id", userId)
+      .eq("provider", "google")
+      .maybeSingle()
 
-    if (upsertTokenError) throw upsertTokenError
-
-    // Backwards-compat: also upsert into integrations if table exists (keeps sync pipeline working)
-    await supabase.from("integrations").upsert(
-      {
+    if (existingToken && isRecord(existingToken) && typeof existingToken["id"] === "string") {
+      const update: Record<string, unknown> = { access_token: accessToken, expires_at: expiresAt, scope }
+      if (refreshToken) update.refresh_token = refreshToken
+      const { error } = await supabase.from("oauth_tokens").update(update).eq("id", existingToken["id"])
+      if (error) throw error
+    } else {
+      const { error } = await supabase.from("oauth_tokens").insert({
         user_id: userId,
         provider: "google",
         access_token: accessToken,
         refresh_token: refreshToken,
         expires_at: expiresAt,
-        meta: { scopes: scope ? scope.split(/\s+/).filter(Boolean) : undefined, calendar_id: "primary" },
+        scope,
+      })
+      if (error) throw error
+    }
+
+    // integrations is for connection status + metadata only (no tokens).
+    const scopesArr = scope ? scope.split(/\s+/).filter(Boolean) : null
+    await supabase.from("integrations").upsert(
+      {
+        user_id: userId,
+        provider: "google",
+        status: "connected",
+        expires_at: expiresAt,
+        scopes: scopesArr,
+        scope,
+        meta: { scopes: scopesArr ?? undefined, calendar_id: "primary" },
+        access_token: "",
+        refresh_token: null,
       },
       { onConflict: "user_id,provider" }
     )
