@@ -127,17 +127,23 @@ export async function GET(req: NextRequest) {
       .maybeSingle()
 
     // If Google didn't return a refresh_token, preserve the existing one from DB.
-    const existingRefreshToken = (() => {
-      if (refreshToken) return null
-      return supabase
-        .from("oauth_tokens")
-        .select("refresh_token")
-        .eq("user_id", parsedState.userId)
-        .eq("provider", "google")
-        .maybeSingle()
-        .then(({ data }) => (isRecord(data) && typeof data.refresh_token === "string" ? data.refresh_token : null))
-        .catch(() => null)
-    })()
+    // Note: Supabase query builders are thenables (PromiseLike) and don't support `.catch()`.
+    let existingRefreshToken: string | null = null
+    if (!refreshToken) {
+      try {
+        const { data, error } = await supabase
+          .from("oauth_tokens")
+          .select("refresh_token")
+          .eq("user_id", parsedState.userId)
+          .eq("provider", "google")
+          .maybeSingle()
+        if (!error) {
+          existingRefreshToken = isRecord(data) && typeof data.refresh_token === "string" ? data.refresh_token : null
+        }
+      } catch {
+        existingRefreshToken = null
+      }
+    }
 
     const prevMeta = isRecord(existingIntegration) ? existingIntegration["meta"] : undefined
     const prevMetadata = isRecord(existingIntegration) ? existingIntegration["metadata"] : undefined
@@ -156,7 +162,7 @@ export async function GET(req: NextRequest) {
 
     // 1) oauth_tokens is the source of truth for Google tokens.
     // True upsert keyed by (user_id, provider), preserving refresh_token when Google doesn't return it.
-    const preservedRefreshToken = refreshToken ?? (await existingRefreshToken)
+    const preservedRefreshToken = refreshToken ?? existingRefreshToken
     const { error: tokenUpsertError } = await supabase.from("oauth_tokens").upsert(
       {
         user_id: parsedState.userId,
