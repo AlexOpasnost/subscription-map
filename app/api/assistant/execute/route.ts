@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 
 import { ActionSchema, type Action } from "@/lib/assistant/actionSchema"
-import { requireServerEnv, requireSupabaseAnonKey, requireSupabaseServiceRoleKey, requireSupabaseUrl } from "@/lib/env"
+import { requireServerEnv, requireSupabaseServiceRoleKey } from "@/lib/env"
+import { supabaseServer } from "@/lib/supabase/server"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
+import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 
 function getBearerToken(req: NextRequest): string | null {
   const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
@@ -31,15 +33,10 @@ export async function POST(req: NextRequest) {
     requireServerEnv("APP_URL")
     // Not used in this endpoint, but required by product spec.
     requireServerEnv("OPENAI_API_KEY")
-    requireSupabaseUrl()
-    requireSupabaseAnonKey()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Missing environment variables."
     return NextResponse.json<ExecuteResponse>({ ok: false, error: msg }, { status: 500 })
   }
-
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json<ExecuteResponse>({ ok: false, error: "Not authenticated" }, { status: 401 })
 
   let body: unknown
   try {
@@ -58,32 +55,40 @@ export async function POST(req: NextRequest) {
 
   const inputText = typeof (body as any)?.text === "string" ? String((body as any).text).trim() : ""
 
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
-
+  // Validate user session (cookies-based SSR client).
+  const authSb = await supabaseServer()
   const {
     data: { user },
-    error: authError,
-  } = await supabase.auth.getUser()
-  if (authError || !user) return NextResponse.json<ExecuteResponse>({ ok: false, error: "Not authenticated" }, { status: 401 })
-  const userId = user.id
+  } = await authSb.auth.getUser()
+  let userId = user?.id ?? ""
+  const bearer = getBearerToken(req)
+  if (!userId && bearer) {
+    try {
+      userId = await getUserIdFromAccessToken(bearer)
+    } catch {
+      // ignore
+    }
+  }
+  if (!userId) return NextResponse.json<ExecuteResponse>({ ok: false, error: "Not authenticated" }, { status: 401 })
+
+  // Use service role for inserts (avoids RLS/policy drift across environments).
+  const admin = getSupabaseAdmin()
+
+  console.log("[assistant/execute] parsed action", { userId, actionType: action.type, action })
 
   async function log(kind: string, result: Record<string, unknown>) {
     try {
-      await supabase.from("assistant_activity").insert({
+      const { error } = await admin.from("assistant_activity").insert({
         user_id: userId,
         kind,
         command: inputText || JSON.stringify(action),
         result,
-        input_text: inputText || null,
-        intent: action,
+        input_text: inputText || JSON.stringify(action),
+        intent: action as unknown,
         status: "ok",
         error: null,
       })
+      if (error) console.error("[assistant/execute] assistant_activity insert error", error)
     } catch {
       // best-effort
     }
@@ -94,9 +99,53 @@ export async function POST(req: NextRequest) {
     return NextResponse.json<ExecuteResponse>({ ok: true, action, message: action.reason, result: { suggestions: action.suggestions } })
   }
 
+  async function maybeEnqueueGoogleSync(input: { targetType: "task" | "reminder"; targetId: string }) {
+    try {
+      const { data: integration, error } = await admin
+        .from("integrations")
+        .select("provider,status,meta,metadata")
+        .eq("user_id", userId)
+        .eq("provider", "google")
+        .maybeSingle()
+      if (error) {
+        console.error("[assistant/execute] integrations select error", error)
+        return
+      }
+      if (!integration) return
+      const status = typeof (integration as any).status === "string" ? String((integration as any).status) : ""
+      if (status && status.toLowerCase() === "disconnected") return
+
+      const legacyAction = input.targetType === "task" ? "push_task" : "push_reminder"
+      const { data: inserted, error: insertErr } = await admin
+        .from("sync_jobs")
+        .insert({
+          user_id: userId,
+          provider: "google",
+          target_type: input.targetType,
+          target_id: input.targetId,
+          action: "upsert",
+          status: "pending",
+          attempts: 0,
+          last_error: null,
+          legacy_action: legacyAction,
+          legacy_payload: { record_id: input.targetId },
+          legacy_status: "queued",
+        })
+        .select("id")
+        .maybeSingle()
+      if (insertErr) {
+        console.error("[assistant/execute] sync_jobs insert error", insertErr)
+        return
+      }
+      console.log("[assistant/execute] sync job created", { provider: "google", jobId: (inserted as any)?.id ?? null })
+    } catch (err) {
+      console.error("[assistant/execute] sync enqueue failed", err)
+    }
+  }
+
   if (action.type === "add_task") {
     const dueDate = action.due_date ?? null
-    const { data: created, error } = await supabase
+    const { data: created, error } = await admin
       .from("tasks")
       .insert({
         user_id: userId,
@@ -111,11 +160,14 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json<ExecuteResponse>({ ok: false, error: error.message, action }, { status: 500 })
 
     // Optional reminder: store as an offset rule (computed in timeline), but also set remind_at so it shows immediately.
+    let reminderId: string | null = null
     if (dueDate && typeof action.remind_days_before === "number" && action.remind_days_before > 0) {
       const offsetDays = Math.floor(action.remind_days_before)
       const remindDate = addDaysDateOnly(dueDate, -offsetDays)
       const remindAtIso = new Date(`${remindDate}T09:00:00.000Z`).toISOString()
-      await supabase.from("reminders").insert({
+      const { data: reminder, error: remErr } = await admin
+        .from("reminders")
+        .insert({
         user_id: userId,
         kind: "task",
         target_type: "task",
@@ -127,14 +179,20 @@ export async function POST(req: NextRequest) {
         remind_at: remindAtIso,
         channel: "in_app",
       })
+        .select("id")
+        .maybeSingle()
+      if (remErr) console.error("[assistant/execute] reminders insert error", remErr)
+      reminderId = typeof (reminder as any)?.id === "string" ? String((reminder as any).id) : null
     }
 
-    await log("ai_execute", { message: "Task created", created })
+    console.log("[assistant/execute] task insert result", { taskId: (created as any)?.id ?? null })
+    await log("ai_execute", { message: "Task created", created, reminderId })
+    await maybeEnqueueGoogleSync({ targetType: "task", targetId: created.id })
     return NextResponse.json<ExecuteResponse>({
       ok: true,
       action,
       message: "Saved task.",
-      result: { task: created },
+      result: { task: created, id: created.id, reminderId },
     })
   }
 
@@ -151,6 +209,12 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    const {
+      data: { session },
+    } = await authSb.auth.getSession()
+    const accessToken = session?.access_token ?? bearer ?? ""
+    if (!accessToken) return NextResponse.json<ExecuteResponse>({ ok: false, error: "Not authenticated" }, { status: 401 })
+
     const created = await createSubscription(
       {
         service: action.service,
@@ -161,21 +225,23 @@ export async function POST(req: NextRequest) {
         renewalDate: action.next_renewal ?? null,
         reminderDays: typeof action.remind_days_before === "number" ? Math.floor(action.remind_days_before) : null,
       },
-      { accessToken: token }
+      // Use cookie-bound auth for createSubscription (it expects user context).
+      { accessToken }
     )
 
+    console.log("[assistant/execute] subscription insert result", { subscriptionId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Subscription created", created })
     return NextResponse.json<ExecuteResponse>({
       ok: true,
       action,
       message: "Saved subscription.",
-      result: { subscription: created },
+      result: { subscription: created, id: (created as any)?.id ?? null },
     })
   }
 
   if (action.type === "add_plan") {
     const startDate = action.date ?? null
-    const { data: created, error } = await supabase
+    const { data: created, error } = await admin
       .from("plans")
       .insert({
         user_id: userId,
@@ -188,15 +254,17 @@ export async function POST(req: NextRequest) {
       .single()
     if (error) return NextResponse.json<ExecuteResponse>({ ok: false, error: error.message, action }, { status: 500 })
 
+    console.log("[assistant/execute] plan insert result", { planId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Plan created", created })
-    return NextResponse.json<ExecuteResponse>({ ok: true, action, message: "Saved plan.", result: { plan: created } })
+    return NextResponse.json<ExecuteResponse>({ ok: true, action, message: "Saved plan.", result: { plan: created, id: created.id } })
   }
 
   if (action.type === "question_spending") {
     const timeframe = action.timeframe ?? "month"
-    const { data: subs, error } = await supabase
+    const { data: subs, error } = await admin
       .from("subscriptions")
       .select("price_cents,period,cancelled")
+      .eq("user_id", userId)
       .eq("cancelled", false)
     if (error) return NextResponse.json<ExecuteResponse>({ ok: false, error: error.message, action }, { status: 500 })
 
@@ -219,16 +287,18 @@ export async function POST(req: NextRequest) {
     const to = action.to ?? addDaysDateOnly(from, 7)
 
     const [{ data: tasks, error: tErr }, { data: subs, error: sErr }] = await Promise.all([
-      supabase
+      admin
         .from("tasks")
         .select("id,title,due_date,due_at,status")
+        .eq("user_id", userId)
         .eq("status", "open")
         .gte("due_date", from)
         .lte("due_date", to)
         .limit(200),
-      supabase
+      admin
         .from("subscriptions")
         .select("id,service,renewal_date,price_cents,period,category")
+        .eq("user_id", userId)
         .eq("cancelled", false)
         .not("renewal_date", "is", null)
         .gte("renewal_date", from)

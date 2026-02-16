@@ -336,10 +336,30 @@ export default function AssistantPage() {
         return
       }
 
-      setPendingAction({ text, action: json.action })
+      // Parse -> execute flow (persist to Supabase).
+      console.log("[assistant] parsed action", json.action)
+      const execRes = await fetch("/api/assistant/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ action: json.action, text }),
+      })
+      const execJson = (await execRes.json()) as AiExecuteResponse
+      setAiLastResult(execJson)
+      if (!execRes.ok || !execJson.ok) {
+        const msg = !execJson.ok && typeof execJson.error === "string" ? execJson.error : `HTTP ${execRes.status}`
+        toast({ title: "Couldn’t save", description: msg, variant: "error" })
+        return
+      }
+
+      toast({ title: "Saved", description: typeof execJson.message === "string" ? execJson.message : "Done.", variant: "success" })
+      setText("")
+      setPendingAction(null)
+      await loadEvents()
+      await loadTasks()
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Network error"
-      toast({ title: "Couldn’t parse", description: msg, variant: "error" })
+      toast({ title: "Couldn’t save", description: msg, variant: "error" })
     } finally {
       setIsParsing(false)
     }
