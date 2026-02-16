@@ -126,12 +126,18 @@ export async function GET(req: NextRequest) {
       .eq("provider", "google")
       .maybeSingle()
 
-    const { data: existingToken } = await supabase
-      .from("oauth_tokens")
-      .select("id,refresh_token")
-      .eq("user_id", parsedState.userId)
-      .eq("provider", "google")
-      .maybeSingle()
+    // If Google didn't return a refresh_token, preserve the existing one from DB.
+    const existingRefreshToken = (() => {
+      if (refreshToken) return null
+      return supabase
+        .from("oauth_tokens")
+        .select("refresh_token")
+        .eq("user_id", parsedState.userId)
+        .eq("provider", "google")
+        .maybeSingle()
+        .then(({ data }) => (isRecord(data) && typeof data.refresh_token === "string" ? data.refresh_token : null))
+        .catch(() => null)
+    })()
 
     const prevMeta = isRecord(existingIntegration) ? existingIntegration["meta"] : undefined
     const prevMetadata = isRecord(existingIntegration) ? existingIntegration["metadata"] : undefined
@@ -149,38 +155,28 @@ export async function GET(req: NextRequest) {
     const scopesArr = scope ? scope.split(/\s+/).filter(Boolean) : null
 
     // 1) oauth_tokens is the source of truth for Google tokens.
-    // Only update refresh_token if Google returned it; otherwise keep existing DB value.
-    if (existingToken && isRecord(existingToken) && typeof existingToken["id"] === "string") {
-      const update: Record<string, unknown> = {
-        access_token: accessToken,
-        expires_at: expiresAt,
-        scope: scope ?? null,
-      }
-      if (refreshToken) update.refresh_token = refreshToken
-
-      const { error: tokenUpdateError } = await supabase.from("oauth_tokens").update(update).eq("id", existingToken["id"])
-      if (tokenUpdateError) throw tokenUpdateError
-    } else {
-      const { error: tokenInsertError } = await supabase.from("oauth_tokens").insert({
+    // True upsert keyed by (user_id, provider), preserving refresh_token when Google doesn't return it.
+    const preservedRefreshToken = refreshToken ?? (await existingRefreshToken)
+    const { error: tokenUpsertError } = await supabase.from("oauth_tokens").upsert(
+      {
         user_id: parsedState.userId,
         provider: "google",
         access_token: accessToken,
-        refresh_token: refreshToken ?? null,
         expires_at: expiresAt,
         scope: scope ?? null,
-      })
-      if (tokenInsertError) throw tokenInsertError
-    }
-
-    const finalRefreshToken =
-      refreshToken ??
-      (isRecord(existingToken) && typeof existingToken["refresh_token"] === "string" ? existingToken["refresh_token"] : null)
-    if (!finalRefreshToken) console.warn(`[integrations/google/callback] missing refresh_token after connect; user_id=${user.id}`)
+        refresh_token: preservedRefreshToken ?? null,
+      },
+      { onConflict: "user_id,provider" }
+    )
+    if (tokenUpsertError) throw tokenUpsertError
+    if (!preservedRefreshToken) console.warn(`[integrations/google/callback] missing refresh_token after connect; user_id=${user.id}`)
 
     // 2) integrations tracks connection status + metadata only (no tokens).
     const integrationsUpsertBase = {
       user_id: parsedState.userId,
       provider: "google",
+      // Some schemas use `connected` boolean; prefer it when present.
+      connected: true,
       status: "connected",
       expires_at: expiresAt,
       scopes: scopesArr,
@@ -200,7 +196,7 @@ export async function GET(req: NextRequest) {
     }
     if (integrationsError) {
       const msg = typeof integrationsError.message === "string" ? integrationsError.message : ""
-      if (msg.toLowerCase().includes("column") && (msg.toLowerCase().includes("status") || msg.toLowerCase().includes("scopes"))) {
+      if (msg.toLowerCase().includes("column")) {
         const res = await supabase.from("integrations").upsert(
           {
             user_id: parsedState.userId,

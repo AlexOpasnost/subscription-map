@@ -98,7 +98,10 @@ export async function createGoogleCalendarEventForUser(input: {
     .maybeSingle()
 
   if (error) throw error
-  if (!tokens) throw new Error("Google tokens not found")
+  if (!tokens) {
+    console.warn(`[google/createEvent] token missing (oauth_tokens) user_id=${input.userId}`)
+    throw new Error("Google tokens not found")
+  }
 
   const { accessToken } = await ensureValidAccessToken(tokens as OAuthTokenRow)
 
