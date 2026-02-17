@@ -29,7 +29,8 @@ export async function enqueueSyncJobs(
 ): Promise<{ enqueued: number; jobIds?: string[] }> {
   const { data: integrations, error: integrationsError } = await supabase
     .from("integrations")
-    .select("provider,meta,metadata")
+    .select("provider,status,connected,meta,metadata")
+    .eq("user_id", input.userId)
 
   if (integrationsError) {
     // Enqueue is best-effort and should never break the user flow.
@@ -39,10 +40,17 @@ export async function enqueueSyncJobs(
   const providers = (integrations ?? [])
     .map((r) => ({
       provider: typeof (r as { provider?: unknown }).provider === "string" ? ((r as { provider: string }).provider as string) : "",
+      status: typeof (r as { status?: unknown }).status === "string" ? String((r as { status: string }).status) : "",
+      connected: typeof (r as { connected?: unknown }).connected === "boolean" ? Boolean((r as { connected: boolean }).connected) : null,
       meta: (r as { meta?: unknown }).meta,
       metadata: (r as { metadata?: unknown }).metadata,
     }))
     .filter((r) => r.provider === "google" || r.provider === "notion")
+    .filter((r) => {
+      if (r.connected === false) return false
+      if (r.status && r.status.toLowerCase() === "disconnected") return false
+      return true
+    })
     .map((r) => {
       const merged = isRecord(r.meta) ? r.meta : isRecord(r.metadata) ? r.metadata : {}
       const settings = getSyncSettings(merged)
@@ -81,10 +89,52 @@ export async function enqueueSyncJobs(
     legacy_status: "queued",
   }))
 
-  const { data: inserted, error: insertError } = await supabase.from("sync_jobs").insert(jobs).select("id")
+  let insertedRows: unknown = null
+  let insertError: { message?: string } | null = null
+  {
+    const res = await supabase.from("sync_jobs").insert(jobs).select("id")
+    insertedRows = res.data
+    insertError = (res.error as { message?: string } | null) ?? null
+  }
+
+  // Fallback for older sync_jobs schemas (no target_type/target_id/etc).
+  if (insertError) {
+    const msg = typeof insertError.message === "string" ? insertError.message.toLowerCase() : ""
+    if (msg.includes("column") && (msg.includes("target_type") || msg.includes("attempts") || msg.includes("legacy_action"))) {
+      const legacyJobs = selectedProviders.map((p) => ({
+        user_id: input.userId,
+        provider: p.provider,
+        action: legacyAction,
+        payload: { record_id: input.targetId },
+        status: "queued" as const,
+        error: null,
+      }))
+      const res = await supabase.from("sync_jobs").insert(legacyJobs).select("id")
+      insertedRows = res.data
+      insertError = (res.error as { message?: string } | null) ?? null
+    }
+  }
+
   if (insertError) return { enqueued: 0 }
 
-  const jobIds = Array.isArray(inserted) ? inserted.map((r: any) => String(r.id)).filter(Boolean) : []
-  return { enqueued: jobs.length, jobIds }
+  const jobIds = Array.isArray(insertedRows) ? insertedRows.map((r: any) => String(r.id)).filter(Boolean) : []
+
+  // Best-effort activity log (never blocks enqueue).
+  try {
+    await supabase.from("assistant_activity").insert({
+      user_id: input.userId,
+      kind: "job_created",
+      command: `sync job created: ${selectedProviders.map((p) => p.provider).join(",")}`,
+      result: { providers: selectedProviders.map((p) => p.provider), target_type: input.targetType, target_id: input.targetId, jobIds },
+      input_text: `sync job created: ${input.targetType}`,
+      intent: {},
+      status: "ok",
+      error: null,
+    })
+  } catch {
+    // ignore
+  }
+
+  return { enqueued: selectedProviders.length, jobIds }
 }
 

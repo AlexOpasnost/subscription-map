@@ -195,7 +195,7 @@ export async function pushToGoogleCalendar(
   supabase: SupabaseClient,
   integration: IntegrationRow,
   input: { action: SyncAction; targetType: string; targetId: string; log: (msg: string) => Promise<void> }
-): Promise<void> {
+): Promise<{ eventId?: string }> {
   const meta = getObject(integration.metadata ?? integration.meta)
   const calendarId = getString(meta.calendar_id) || "primary"
   const { data: tokens, error: tokenErr } = await supabase
@@ -244,25 +244,33 @@ export async function pushToGoogleCalendar(
     }
     await deleteExternalId(supabase, { userId, provider: "google", targetType, targetId })
     await input.log("Deleted external link.")
-    return
+    return {}
   }
 
   if (targetType === "task") {
-    const { data, error } = await supabase.from("tasks").select("id,title,due_at,meta").eq("id", targetId).single()
+    const { data, error } = await supabase.from("tasks").select("id,title,due_at,due_date,meta").eq("id", targetId).single()
     if (error) throw error
     const task = data as TaskRow
-    if (!task.due_at) {
-      await input.log("Task has no due_at; skipping Google Calendar event.")
-      return
+    const dueAt = task.due_at
+    const dueDate = typeof (task as any).due_date === "string" ? String((task as any).due_date) : null
+    const dueAtIso =
+      dueAt && String(dueAt).trim()
+        ? String(dueAt)
+        : dueDate && dueDate.trim()
+          ? new Date(`${dueDate}T09:00:00.000Z`).toISOString()
+          : null
+    if (!dueAtIso) {
+      await input.log("Task has no due_at/due_date; skipping Google Calendar event.")
+      return {}
     }
 
     const existingEventId =
       (await getExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id })) ??
       getString(getObject(task.meta).google_event_id)
-    const due = new Date(task.due_at)
+    const due = new Date(dueAtIso)
     if (Number.isNaN(due.getTime())) {
       await input.log("Task due_at is invalid; skipping.")
-      return
+      return {}
     }
 
     const end = new Date(due.getTime() + 30 * 60 * 1000)
@@ -278,7 +286,7 @@ export async function pushToGoogleCalendar(
     const nextMeta = { ...getObject(task.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "tasks", task.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
-    return
+    return { eventId }
   }
 
   if (targetType === "plan") {
@@ -309,7 +317,7 @@ export async function pushToGoogleCalendar(
     const nextMeta = { ...getObject(plan.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "plans", plan.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
-    return
+    return { eventId }
   }
 
   if (targetType === "subscription") {
@@ -344,7 +352,7 @@ export async function pushToGoogleCalendar(
     const nextMeta = { ...getObject(sub.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "subscriptions", sub.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
-    return
+    return { eventId }
   }
 
   if (targetType === "person") {
@@ -382,7 +390,7 @@ export async function pushToGoogleCalendar(
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "person", targetId: person.id, externalId: eventId })
     await input.log(`Saved google_event_id=${eventId}`)
-    return
+    return { eventId }
   }
 
   throw new Error(`Unsupported target_type for Google Calendar: ${targetType}`)

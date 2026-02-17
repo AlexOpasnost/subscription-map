@@ -125,7 +125,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: insertError.message, details: insertError }, { status: 500 })
   }
 
-  const sync = await enqueueSyncJobs(supabase, { userId: user.id, action: "upsert", targetType: "task", targetId: created.id })
+  const shouldSyncGoogleForTask = Boolean((created as any)?.due_at) || Boolean((created as any)?.due_date)
+  const sync = shouldSyncGoogleForTask
+    ? await enqueueSyncJobs(supabase, { userId: user.id, provider: "google", action: "upsert", targetType: "task", targetId: created.id })
+    : { enqueued: 0 }
   return NextResponse.json({ ok: true, task: created as TaskRow, sync })
 }
 

@@ -35,7 +35,7 @@ function parseAction(v: unknown): SyncAction | null {
 async function processJob(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   job: SyncJobRow
-): Promise<void> {
+): Promise<{ eventId?: string }> {
   const provider = parseProvider(job.provider)
   const action = parseAction(job.action)
   const targetType = typeof (job as any).target_type === "string" ? String((job as any).target_type) : ""
@@ -61,17 +61,34 @@ async function processJob(
   await log(`Running ${provider}:${action} for ${targetType}:${targetId}`)
 
   if (provider === "google") {
-    await pushToGoogleCalendar(supabase, integration as IntegrationRow, { action, targetType, targetId, log })
-    return
+    const out = await pushToGoogleCalendar(supabase, integration as IntegrationRow, { action, targetType, targetId, log })
+    return out ?? {}
   }
 
   if (provider === "notion") {
     await pushToNotion(supabase, integration as IntegrationRow, { action, targetType, targetId, log })
-    return
+    return {}
   }
 
   const neverProvider: never = provider
   throw new Error(`Unsupported provider: ${neverProvider}`)
+}
+
+async function logAssistantActivity(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  input: { userId: string; kind: string; command: string; result: Record<string, unknown> }
+) {
+  const { error } = await supabase.from("assistant_activity").insert({
+    user_id: input.userId,
+    kind: input.kind,
+    command: input.command,
+    result: input.result,
+    input_text: input.command,
+    intent: {},
+    status: "ok",
+    error: null,
+  })
+  if (error) console.error("[sync/run] assistant_activity insert error", error)
 }
 
 async function claimJob(supabase: ReturnType<typeof getSupabaseAdmin>, jobId: string): Promise<boolean> {
@@ -170,9 +187,23 @@ export async function POST(req: NextRequest) {
       // Increment attempts early (best-effort) so retries are bounded even if execution crashes mid-flight.
       await supabase.from("sync_jobs").update({ attempts: (job.attempts ?? 0) + 1 }).eq("id", job.id)
       await insertLog(supabase, job, "Started")
-      await processJob(supabase, job)
+      const out = await processJob(supabase, job)
       await insertLog(supabase, job, "Completed OK")
       await markOk(supabase, job.id)
+      await logAssistantActivity(supabase, {
+        userId: job.user_id,
+        kind: "job_executed",
+        command: `sync job executed: ${job.provider}`,
+        result: { jobId: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "ok" },
+      })
+      if (job.provider === "google" && out?.eventId) {
+        await logAssistantActivity(supabase, {
+          userId: job.user_id,
+          kind: "google_event_created",
+          command: "google calendar event created",
+          result: { jobId: job.id, calendarEventId: out.eventId, target_type: (job as any).target_type, target_id: (job as any).target_id },
+        })
+      }
       ok += 1
       results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "ok" })
     } catch (err: unknown) {
