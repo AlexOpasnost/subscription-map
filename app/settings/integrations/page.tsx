@@ -40,6 +40,7 @@ export default function IntegrationsPage() {
   const [savingNotion, setSavingNotion] = useState(false)
   const [settingsSaving, setSettingsSaving] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [creatingTestEvent, setCreatingTestEvent] = useState(false)
   const [status, setStatus] = useState<{
     ok?: boolean
     connected: { google: boolean; notion: boolean }
@@ -277,6 +278,28 @@ export default function IntegrationsPage() {
     }
   }
 
+  const createGoogleTestEvent = async () => {
+    if (!user) return
+    if (creatingTestEvent) return
+    setCreatingTestEvent(true)
+    try {
+      const res = await fetch("/api/integrations/google/test", { method: "GET", credentials: "include" })
+      const json: unknown = await res.json()
+      if (!res.ok || !(isRecord(json) && json.ok === true)) throw new Error(apiError(json, res))
+      const eventId = isRecord(json) && typeof json.eventId === "string" ? json.eventId : ""
+      const htmlLink = isRecord(json) && typeof json.htmlLink === "string" ? json.htmlLink : ""
+      toast({
+        title: "Test event created",
+        description: htmlLink ? `${eventId} — ${htmlLink}` : eventId || "Created.",
+        variant: "success",
+      })
+    } catch (err: unknown) {
+      toast({ title: "Couldn’t create test event", description: humanizeError(err), variant: "error" })
+    } finally {
+      setCreatingTestEvent(false)
+    }
+  }
+
   const Card = ({
     provider,
     title,
@@ -315,6 +338,22 @@ export default function IntegrationsPage() {
                 <div className="mt-2 text-xs text-muted-foreground">
                   Scopes: <span className="text-foreground/80">{status.google.scopes.slice(0, 3).join(", ")}</span>
                   {status.google.scopes.length > 3 ? <span className="opacity-70"> +{status.google.scopes.length - 3} more</span> : null}
+                </div>
+              ) : null}
+              {provider === "google" ? (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9"
+                    onClick={createGoogleTestEvent}
+                    disabled={!connected || creatingTestEvent || busyProvider !== null}
+                    loading={creatingTestEvent}
+                    loadingText="Creating…"
+                  >
+                    Create test event
+                  </Button>
                 </div>
               ) : null}
               {last ? (
