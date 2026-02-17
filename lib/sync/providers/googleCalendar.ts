@@ -296,7 +296,7 @@ export async function pushToGoogleCalendar(
     const startDate = plan.start_date
     if (!startDate) {
       await input.log("Plan has no start_date; skipping Google Calendar event.")
-      return
+      return { eventId: undefined }
     }
 
     const endDateInclusive = plan.end_date ?? startDate
@@ -330,7 +330,7 @@ export async function pushToGoogleCalendar(
     const sub = data as SubscriptionRow
     if (!sub.renewal_date) {
       await input.log("Subscription has no renewal_date; skipping Google Calendar event.")
-      return
+      return { eventId: undefined }
     }
 
     const existingEventId =
@@ -361,14 +361,14 @@ export async function pushToGoogleCalendar(
     const person = data as PersonRow
     if (!person.birth_date) {
       await input.log("Person has no birth_date; skipping Google Calendar event.")
-      return
+      return { eventId: undefined }
     }
 
     // Create a yearly recurring all-day event. Start at the next occurrence.
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(person.birth_date)
     if (!m) {
       await input.log("birth_date is invalid; skipping.")
-      return
+      return { eventId: undefined }
     }
     const mm = Number(m[2])
     const dd = Number(m[3])
