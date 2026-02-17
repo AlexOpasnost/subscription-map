@@ -20,7 +20,8 @@ export async function GET(req: NextRequest) {
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
     const expState = `${userId}:${crypto.randomUUID()}`
 
-    const scope = ["https://www.googleapis.com/auth/calendar.events"].join(" ")
+    // Use full Calendar scope so we can create calendars + events.
+    const scope = ["https://www.googleapis.com/auth/calendar"].join(" ")
 
     const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
     url.searchParams.set("client_id", clientId)

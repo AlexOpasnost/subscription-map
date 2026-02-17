@@ -264,10 +264,7 @@ export default function IntegrationsPage() {
     if (retrying) return
     setRetrying(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) throw new Error("You’re signed out. Please sign in again.")
-      const res = await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch("/api/sync/run", { method: "POST", credentials: "include" })
       const json: unknown = await res.json()
       if (!res.ok) throw new Error(apiError(json, res))
       const processed = isRecord(json) && typeof json.processed === "number" ? json.processed : 0
@@ -293,6 +290,7 @@ export default function IntegrationsPage() {
   }) => {
     const connected = providers[provider]
     const last = status?.lastSync?.[provider] ?? null
+    const lastLabel = last?.status === "ok" ? "done" : last?.status === "error" ? "failed" : last?.status ?? ""
     return (
       <GlassSurface className="p-0">
         <div className="p-6 sm:p-8">
@@ -321,7 +319,7 @@ export default function IntegrationsPage() {
               ) : null}
               {last ? (
                 <div className="mt-2 text-xs text-muted-foreground">
-                  Last sync: <span className="text-foreground/80">{last.status}</span>{" "}
+                  Last sync: <span className="text-foreground/80">{lastLabel || last.status}</span>{" "}
                   <span className="opacity-70">({new Date(last.updated_at).toLocaleString()})</span>
                   {last.last_error ? <div className="mt-1 text-destructive">{last.last_error}</div> : null}
                 </div>
