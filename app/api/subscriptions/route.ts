@@ -1,5 +1,4 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 
 import {
   createSubscription,
@@ -8,27 +7,18 @@ import {
   SubscriptionValidationError,
 } from "@/lib/subscriptions/createSubscription"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
+import { supabaseServer } from "@/lib/supabase/server"
 
 type Ok = { ok: true; data: SubscriptionRow }
 type Err = { ok: false; message: string; details?: unknown }
 
-function getEnv(name: string): string {
-  const v = process.env[name]
-  if (!v || !v.trim()) throw new Error(`Missing environment variable: ${name}`)
-  return v
-}
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
-
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) {
+  const supabase = await supabaseServer()
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError || !user) {
     return NextResponse.json<Err>({ ok: false, message: "Not authenticated" }, { status: 401 })
   }
 
@@ -40,15 +30,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const created = await createSubscription(body as CreateSubscriptionInput, { accessToken: token })
+    const created = await createSubscription(body as CreateSubscriptionInput, { supabase })
     // Best-effort enqueue; never block creating the subscription.
     try {
-      const supabaseUrl = requireSupabaseUrl()
-      const supabaseAnonKey = requireSupabaseAnonKey()
-      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      })
       const sync = await enqueueSyncJobs(supabase, {
         userId: created.user_id,
         action: "upsert",

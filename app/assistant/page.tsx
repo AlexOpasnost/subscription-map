@@ -192,13 +192,9 @@ export default function AssistantPage() {
 
   const loadTasks = async () => {
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) return
-
       const res = await fetch("/api/tasks/list", {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       })
       const json = (await res.json()) as { ok: boolean; tasks?: TaskRow[]; error?: string }
       if (!res.ok || !json.ok) {
@@ -225,19 +221,12 @@ export default function AssistantPage() {
     setSending(true)
     setLastResult(null)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
-        return
-      }
-
       const res = await fetch("/api/assistant?mode=preview", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ text }),
       })
 
@@ -313,19 +302,12 @@ export default function AssistantPage() {
     setLastResult(null)
     setAiLastResult(null)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
-        return
-      }
-
       const res = await fetch("/api/assistant/parse", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ text }),
       })
 
@@ -375,16 +357,10 @@ export default function AssistantPage() {
     if (!user) return
     setSending(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
-        return
-      }
-
       const res = await fetch("/api/assistant/execute", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ action: pendingAction.action, text: pendingAction.text }),
       })
       const json = (await res.json()) as AiExecuteResponse
@@ -417,19 +393,12 @@ export default function AssistantPage() {
     if (!user) return
     setSending(true)
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
-        return
-      }
-
       const res = await fetch("/api/assistant?mode=execute", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify({ text: pendingPreview.commandText }),
       })
 
@@ -453,7 +422,7 @@ export default function AssistantPage() {
 
       // Best-effort: run sync immediately so the user sees quick results.
       try {
-        const syncRes = await fetch("/api/sync/run", { method: "POST", headers: { Authorization: `Bearer ${token}` } })
+        const syncRes = await fetch("/api/sync/run", { method: "POST", credentials: "include" })
         const syncJson = (await syncRes.json()) as any
         if (syncRes.ok && Array.isArray(syncJson?.results)) {
           const byProvider = new Map<string, { ok: number; error: number }>()

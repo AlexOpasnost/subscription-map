@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
+import { supabaseServer } from "@/lib/supabase/server"
 
 type ReminderRow = {
   id: string
@@ -13,22 +12,12 @@ type ReminderRow = {
   created_at: string
 }
 
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
-
 function isIsoDateTime(s: string): boolean {
   const d = new Date(s)
   return Number.isFinite(d.getTime())
 }
 
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
   let body: unknown
   try {
     body = (await req.json()) as unknown
@@ -94,12 +83,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
+  const supabase = await supabaseServer()
 
   const {
     data: { user },

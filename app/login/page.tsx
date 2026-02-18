@@ -23,7 +23,7 @@ export default function LoginPage() {
     const run = async () => {
       const { data, error } = await supabase.auth.getSession()
       if (error && process.env.NODE_ENV !== "production") console.error("getSession error:", error)
-      if (data.session) router.replace("/app")
+      if (data.session) router.replace("/dashboard")
     }
 
     run()
@@ -80,7 +80,7 @@ export default function LoginPage() {
       if (error) throw error
 
       toast({ title: "Signed in", variant: "success" })
-      router.push("/app")
+      router.push("/dashboard")
     } catch (err: unknown) {
       if (process.env.NODE_ENV !== "production") console.error("signInWithPassword error:", err)
 
@@ -135,7 +135,7 @@ export default function LoginPage() {
 
       if (data.session) {
         toast({ title: "Account created", description: "Signed in.", variant: "success" })
-        router.push("/app")
+        router.push("/dashboard")
         return
       }
 

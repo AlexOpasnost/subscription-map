@@ -1,4 +1,4 @@
-import { createClient, type PostgrestError } from "@supabase/supabase-js"
+import { createClient, type PostgrestError, type SupabaseClient } from "@supabase/supabase-js"
 
 export type SubscriptionPeriod = "monthly" | "yearly"
 
@@ -123,9 +123,8 @@ function validateAndNormalize(input: CreateSubscriptionInput): Required<Omit<Cre
   return { service, plan, priceCents, period, category, cancelUrl, reminderDays, renewalDate, cancelled }
 }
 
-async function createSubscriptionServer(input: CreateSubscriptionInput, accessToken: string): Promise<SubscriptionRow> {
+async function createSubscriptionWithClient(input: CreateSubscriptionInput, supabase: SupabaseClient): Promise<SubscriptionRow> {
   const normalized = validateAndNormalize(input)
-  const supabase = buildSupabaseClientForToken(accessToken)
 
   const {
     data: { user },
@@ -160,8 +159,10 @@ async function createSubscriptionServer(input: CreateSubscriptionInput, accessTo
 
 type CreateSubscriptionOptions = {
   /**
-   * Required on the server. In the browser, `createSubscription()` will fetch a token from the current Supabase session.
+   * Prefer providing a Supabase client (cookie-auth in route handlers).
+   * If omitted on the server, `accessToken` is required as a fallback.
    */
+  supabase?: SupabaseClient
   accessToken?: string
 }
 
@@ -174,17 +175,12 @@ type CreateSubscriptionOptions = {
 export async function createSubscription(input: CreateSubscriptionInput, opts?: CreateSubscriptionOptions): Promise<SubscriptionRow> {
   if (typeof window !== "undefined") {
     // Browser path: call our API so user_id always comes from server-side auth.
-    const { supabase } = await import("@/lib/supabase/client")
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
-    if (!token) throw new CreateSubscriptionError("Not authenticated.")
-
     const res = await fetch("/api/subscriptions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
       },
+      credentials: "include",
       body: JSON.stringify(input),
     })
 
@@ -211,8 +207,13 @@ export async function createSubscription(input: CreateSubscriptionInput, opts?: 
     return json as SubscriptionRow
   }
 
+  if (opts?.supabase) {
+    return await createSubscriptionWithClient(input, opts.supabase)
+  }
+
   const accessToken = requireAccessTokenOnServer(opts?.accessToken)
-  return await createSubscriptionServer(input, accessToken)
+  const supabase = buildSupabaseClientForToken(accessToken)
+  return await createSubscriptionWithClient(input, supabase)
 }
 
 export { CreateSubscriptionError, SubscriptionValidationError }

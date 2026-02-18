@@ -28,10 +28,7 @@ export default function AdminPage() {
     setLoading(true)
     setError("")
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) throw new Error("You’re signed out. Please sign in again.")
-      const res = await fetch("/api/admin/dashboard", { headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch("/api/admin/dashboard", { credentials: "include" })
       const json = (await res.json()) as any
       if (!res.ok || !json.ok) {
         throw new Error(typeof json?.error === "string" ? json.error : `HTTP ${res.status}`)

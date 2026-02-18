@@ -1,24 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server"
 import OpenAI from "openai"
 import crypto from "crypto"
-import { createClient } from "@supabase/supabase-js"
 
 import {
   normalizeAbsoluteUrl,
   requireServerEnv,
-  requireSupabaseAnonKey,
   requireSupabaseServiceRoleKey,
-  requireSupabaseUrl,
 } from "@/lib/env"
-import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 import { ActionSchema, unsupported, type Action } from "@/lib/assistant/actionSchema"
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { supabaseServer } from "@/lib/supabase/server"
 
 function extractFirstJsonObject(text: string): unknown | null {
   const s = text.trim()
@@ -101,21 +92,16 @@ export async function POST(req: NextRequest) {
     requireServerEnv("OPENAI_API_KEY")
     requireSupabaseServiceRoleKey()
     normalizeAbsoluteUrl(requireServerEnv("APP_URL"))
-    requireSupabaseUrl()
-    requireSupabaseAnonKey()
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Missing environment variables."
     return NextResponse.json({ error: msg, action: unsupported(msg) }, { status: 500 })
   }
 
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ error: "Not authenticated", action: unsupported("Not authenticated") }, { status: 401 })
-  let userId = ""
-  try {
-    userId = await getUserIdFromAccessToken(token)
-  } catch {
-    return NextResponse.json({ error: "Not authenticated", action: unsupported("Not authenticated") }, { status: 401 })
-  }
+  const supabase = await supabaseServer()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: "Not authenticated", action: unsupported("Not authenticated") }, { status: 401 })
 
   let body: unknown
   try {
@@ -146,17 +132,14 @@ export async function POST(req: NextRequest) {
 
     // Best-effort usage logging (never blocks the response).
     try {
-      const supabase = createClient(requireSupabaseUrl(), requireSupabaseAnonKey(), {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      })
+      const admin = getSupabaseAdmin()
       const usage = (resp as any)?.usage ?? {}
       const inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null
       const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : null
       const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null
       const requestId = typeof (resp as any)?.id === "string" ? String((resp as any).id) : crypto.randomUUID()
-      await supabase.from("ai_usage").insert({
-        user_id: userId,
+      await admin.from("ai_usage").insert({
+        user_id: user.id,
         request_id: requestId,
         model: model,
         input_tokens: inputTokens,

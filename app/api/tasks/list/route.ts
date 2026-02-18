@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
+import { supabaseServer } from "@/lib/supabase/server"
 
 type TaskRow = {
   id: string
@@ -11,26 +10,8 @@ type TaskRow = {
   created_at: string
 }
 
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
-
 export async function GET(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) {
-    return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-  }
-
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
-
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
+  const supabase = await supabaseServer()
 
   const {
     data: { user },

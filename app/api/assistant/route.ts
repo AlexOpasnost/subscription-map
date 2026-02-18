@@ -1,7 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-import { requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
+import { supabaseServer } from "@/lib/supabase/server"
 import type {
   AddBirthdayArgs,
   AddPlanArgs,
@@ -53,13 +51,6 @@ function parseMaybeIsoDateTime(input: string): string | null {
   const iso = new Date(s)
   if (!Number.isNaN(iso.getTime())) return iso.toISOString()
   return null
-}
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
 }
 
 function extractErrorMessage(err: unknown): string {
@@ -130,13 +121,7 @@ function isoDateOnlyFromIso(iso: string): string | null {
 }
 
 export async function POST(req: NextRequest) {
-  const supabaseUrl = requireSupabaseUrl()
-  const supabaseAnonKey = requireSupabaseAnonKey()
-
-  const token = getBearerToken(req)
-  if (!token) {
-    return NextResponse.json<AssistantResponse>({ ok: false, error: "Not authenticated" }, { status: 401 })
-  }
+  const supabase = await supabaseServer()
 
   const url = new URL(req.url)
   const mode = (url.searchParams.get("mode") ?? "execute").toLowerCase()
@@ -157,12 +142,6 @@ export async function POST(req: NextRequest) {
   if (!text.trim()) {
     return NextResponse.json<AssistantResponse>({ ok: false, error: "Missing `text`" }, { status: 400 })
   }
-
-  // Supabase client bound to the user's JWT for RLS.
-  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
 
   const {
     data: { user },
@@ -364,7 +343,7 @@ export async function POST(req: NextRequest) {
       const payloadForInsert = { service, plan: finalPlan, priceCents, period, category, reminderDays, renewalDate }
       let created: Awaited<ReturnType<typeof createSubscription>>
       try {
-        created = await createSubscription(payloadForInsert, { accessToken: token })
+        created = await createSubscription(payloadForInsert, { supabase })
       } catch (err: unknown) {
         const rawMsg = extractErrorMessage(err) || "Couldn’t create subscription."
         const msg = toUserSafeAssistantError(rawMsg)

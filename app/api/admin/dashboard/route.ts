@@ -1,15 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
-import { createClient } from "@supabase/supabase-js"
 
-import { requireSupabaseAnonKey, requireSupabaseServiceRoleKey, requireSupabaseUrl } from "@/lib/env"
+import { requireSupabaseServiceRoleKey } from "@/lib/env"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
-}
+import { supabaseServer } from "@/lib/supabase/server"
 
 function parseAdminEmails(raw: string): Set<string> {
   return new Set(
@@ -21,9 +14,6 @@ function parseAdminEmails(raw: string): Set<string> {
 }
 
 export async function GET(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
-
   const adminEmails = parseAdminEmails((process.env.ADMIN_EMAILS ?? "").trim())
   if (adminEmails.size === 0) {
     return NextResponse.json(
@@ -32,11 +22,8 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  // Authenticate the caller using user JWT (RLS-bound).
-  const supabase = createClient(requireSupabaseUrl(), requireSupabaseAnonKey(), {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  })
+  // Authenticate the caller using cookie session.
+  const supabase = await supabaseServer()
   const {
     data: { user },
     error: authError,

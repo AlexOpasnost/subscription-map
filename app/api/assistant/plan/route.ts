@@ -1,22 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server"
 import OpenAI from "openai"
 import crypto from "crypto"
-import { createClient } from "@supabase/supabase-js"
 
-import { requireServerEnv, requireSupabaseAnonKey, requireSupabaseUrl } from "@/lib/env"
+import { requireServerEnv } from "@/lib/env"
 import { parsePlanSafe } from "@/lib/assistant/planSchema"
-import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { supabaseServer } from "@/lib/supabase/server"
 
 function getFallbackPlan() {
   const r = parsePlanSafe({})
   return r.ok ? r.plan : r.fallbackPlan
-}
-
-function getBearerToken(req: NextRequest): string | null {
-  const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
-  if (!h) return null
-  const m = /^Bearer\\s+(.+)$/.exec(h)
-  return m ? m[1].trim() : null
 }
 
 function extractFirstJsonObject(text: string): unknown | null {
@@ -97,16 +90,11 @@ const SYSTEM_PROMPT = [
 ].join("\\n")
 
 export async function POST(req: NextRequest) {
-  const token = getBearerToken(req)
-  if (!token) return NextResponse.json({ error: "Not authenticated", plan: getFallbackPlan() }, { status: 401 })
-  let userId = ""
-  try {
-    // Validate token (keeps this endpoint protected and cost-contained).
-    userId = await getUserIdFromAccessToken(token)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Not authenticated"
-    return NextResponse.json({ error: msg, plan: getFallbackPlan() }, { status: 401 })
-  }
+  const supabase = await supabaseServer()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: "Not authenticated", plan: getFallbackPlan() }, { status: 401 })
 
   let body: unknown
   try {
@@ -147,17 +135,14 @@ export async function POST(req: NextRequest) {
 
     // Best-effort usage logging (never blocks the response).
     try {
-      const supabase = createClient(requireSupabaseUrl(), requireSupabaseAnonKey(), {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-      })
+      const admin = getSupabaseAdmin()
       const usage = (resp as any)?.usage ?? {}
       const inputTokens = typeof usage.prompt_tokens === "number" ? usage.prompt_tokens : null
       const outputTokens = typeof usage.completion_tokens === "number" ? usage.completion_tokens : null
       const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null
       const requestId = typeof (resp as any)?.id === "string" ? String((resp as any).id) : crypto.randomUUID()
-      await supabase.from("ai_usage").insert({
-        user_id: userId,
+      await admin.from("ai_usage").insert({
+        user_id: user.id,
         request_id: requestId,
         model: model,
         input_tokens: inputTokens,

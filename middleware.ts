@@ -30,7 +30,21 @@ export async function middleware(req: NextRequest) {
   })
 
   // Important: triggers session refresh + cookie updates when needed.
-  await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  const path = req.nextUrl.pathname
+  const isLogin = path === "/login"
+  const isDashboard = path === "/dashboard" || path.startsWith("/dashboard/")
+
+  // Auth redirects (server-side, avoids client-side flicker).
+  if (isLogin && user) {
+    return NextResponse.redirect(new URL("/dashboard", req.url))
+  }
+  if (isDashboard && !user) {
+    return NextResponse.redirect(new URL("/login", req.url))
+  }
 
   return res
 }

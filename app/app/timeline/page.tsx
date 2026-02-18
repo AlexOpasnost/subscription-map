@@ -67,16 +67,9 @@ export default function TimelinePage() {
     setLoading(true)
     setError("")
     try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData.session?.access_token
-      if (!token) {
-        toast({ title: "You’re signed out", description: "Please sign in again.", variant: "error" })
-        return
-      }
-
       const res = await fetch(`/api/timeline?days=${nextDays}`, {
         method: "GET",
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       })
       const json = (await res.json()) as { ok: boolean; items?: TimelineItem[]; error?: string }
       if (!res.ok || !json.ok) {
