@@ -191,6 +191,173 @@ async function updateRecordMeta(
   if (error) throw error
 }
 
+export async function syncGoogleCalendarEvent(input: {
+  supabase: SupabaseClient
+  userId: string
+  planId: string
+}): Promise<{ status: "created" | "updated" | "skipped" | "error"; eventId?: string; error?: string }> {
+  const supabase = input.supabase
+  const userId = input.userId
+  const planId = input.planId
+
+  const nowIso = new Date().toISOString()
+  const logPrefix = `[syncGoogleCalendarEvent] user_id=${userId} plan_id=${planId}`
+
+  const insertSyncJob = async (): Promise<{ id: string } | null> => {
+    // Prefer sync_jobs v2 schema; fall back to legacy schema (migration 004).
+    try {
+      const { data, error } = await supabase
+        .from("sync_jobs")
+        .insert({
+          user_id: userId,
+          provider: "google",
+          target_type: "plan",
+          target_id: planId,
+          action: "upsert",
+          status: "pending",
+          attempts: 0,
+          last_error: null,
+          legacy_action: "push_plan",
+          legacy_payload: { record_id: planId },
+          legacy_status: "queued",
+        })
+        .select("id")
+        .single()
+      if (error) throw error
+      return data as { id: string }
+    } catch {
+      try {
+        const { data, error } = await supabase
+          .from("sync_jobs")
+          .insert({
+            user_id: userId,
+            provider: "google",
+            action: "push_plan",
+            payload: { record_id: planId },
+            status: "queued",
+            error: null,
+          })
+          .select("id")
+          .single()
+        if (error) throw error
+        return data as { id: string }
+      } catch {
+        return null
+      }
+    }
+  }
+
+  const syncJob = await insertSyncJob()
+  const logToDb = async (message: string) => {
+    if (!syncJob?.id) return
+    try {
+      // migration 004: sync_job_id is NOT NULL; only log if we have a job id.
+      await supabase.from("sync_logs").insert({ user_id: userId, sync_job_id: syncJob.id, message })
+    } catch {
+      // best-effort
+    }
+  }
+
+  const markJob = async (status: "ok" | "error", lastError: string | null) => {
+    if (!syncJob?.id) return
+    try {
+      await supabase
+        .from("sync_jobs")
+        .update({
+          status,
+          last_error: lastError,
+          legacy_status: status === "ok" ? "ok" : "error",
+          error: lastError,
+        } as any)
+        .eq("id", syncJob.id)
+    } catch {
+      // best-effort
+    }
+  }
+
+  console.log(`${logPrefix} start at=${nowIso}`)
+  await logToDb(`start at=${nowIso}`)
+
+  try {
+    const { data: plan, error: planErr } = await supabase
+      .from("plans")
+      .select("id,user_id,title,start_date,end_date,meta,google_event_id")
+      .eq("id", planId)
+      .maybeSingle()
+    if (planErr) throw planErr
+    if (!plan) {
+      const msg = "PLAN_NOT_FOUND"
+      await logToDb(`error ${msg}`)
+      await markJob("error", msg)
+      return { status: "error", error: msg }
+    }
+    if (String((plan as any).user_id ?? "") !== userId) {
+      const msg = "PLAN_USER_MISMATCH"
+      await logToDb(`error ${msg}`)
+      await markJob("error", msg)
+      return { status: "error", error: msg }
+    }
+
+    const startDate = typeof (plan as any).start_date === "string" ? String((plan as any).start_date) : ""
+    if (!startDate) {
+      await logToDb("skipped NO_START_DATE")
+      await markJob("ok", null)
+      return { status: "skipped", error: "NO_START_DATE" }
+    }
+
+    const endDateInclusive =
+      typeof (plan as any).end_date === "string" && String((plan as any).end_date).trim()
+        ? String((plan as any).end_date)
+        : startDate
+    const endExclusive = addDaysIsoDate(endDateInclusive, 1)
+
+    const { data: tokens, error: tokenErr } = await supabase
+      .from("oauth_tokens")
+      .select("id,user_id,provider,access_token,refresh_token,expires_at,scope")
+      .eq("user_id", userId)
+      .eq("provider", "google")
+      .maybeSingle()
+    if (tokenErr) throw tokenErr
+    if (!tokens) {
+      const msg = "NO_GOOGLE_TOKENS"
+      await logToDb(`error ${msg}`)
+      await markJob("error", msg)
+      return { status: "error", error: msg }
+    }
+
+    const ensured = await ensureGoogleAccessToken(supabase, tokens as OAuthTokenRow)
+    const accessToken = ensured.accessToken
+
+    // Idempotence: prefer column, fall back to meta (back-compat), then write back to column.
+    const columnEventId = typeof (plan as any).google_event_id === "string" ? String((plan as any).google_event_id) : ""
+    const metaEventId = getString(getObject((plan as any).meta).google_event_id)
+    const existingEventId = (columnEventId || metaEventId).trim() || undefined
+
+    const body = {
+      summary: String((plan as any).title ?? "Plan"),
+      start: { date: startDate },
+      end: { date: endExclusive },
+    }
+
+    await logToDb(existingEventId ? "upsert: update" : "upsert: create")
+    const { eventId } = await upsertEvent(accessToken, { calendarId: "primary", existingEventId, body })
+
+    const { error: updErr } = await supabase.from("plans").update({ google_event_id: eventId }).eq("id", planId)
+    if (updErr) throw updErr
+
+    await logToDb(`ok eventId=${eventId}`)
+    await markJob("ok", null)
+    console.log(`${logPrefix} ok eventId=${eventId} mode=${existingEventId ? "updated" : "created"}`)
+    return { status: existingEventId ? "updated" : "created", eventId }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "SYNC_FAILED"
+    console.error(`${logPrefix} error`, err)
+    await logToDb(`error ${msg}`)
+    await markJob("error", msg.slice(0, 600))
+    return { status: "error", error: msg }
+  }
+}
+
 export async function pushToGoogleCalendar(
   supabase: SupabaseClient,
   integration: IntegrationRow,

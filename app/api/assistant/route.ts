@@ -13,6 +13,7 @@ import { getIntentPreview, parseInput } from "@/lib/assistant/parse"
 import { subscriptionCatalog } from "@/lib/subscriptionCatalog"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
+import { syncGoogleCalendarEvent } from "@/lib/sync/providers/googleCalendar"
 import { toCents } from "@/lib/toCents"
 
 type AssistantStage = "preview" | "executed"
@@ -606,10 +607,14 @@ export async function POST(req: NextRequest) {
         console.error("[assistant] plans insert error", error)
         throw new Error(error.message)
       }
-      const sync = await enqueueSyncJobs(supabase, { userId, action: "upsert", targetType: "plan", targetId: created.id })
+
+      // Prefer immediate plan sync (idempotent + visible via sync_jobs/sync_logs).
+      // Keep API response shape stable (`sync.enqueued`) for existing UI.
+      const googleSync = await syncGoogleCalendarEvent({ supabase, userId, planId: created.id })
+      const sync = { enqueued: 0 }
       await logEvent("ok")
       const message = `Added plan: ${created?.title ?? args.title}`
-      const result = created ?? null
+      const result = created ? { ...created, googleSync } : null
       await logActivity("action", { intent: parsed, status: "ok", result: { stage: "executed", message, result, sync } })
       return NextResponse.json<AssistantResponse>({ ok: true, stage: "executed", message, intent: parsed, preview, result, sync })
     }

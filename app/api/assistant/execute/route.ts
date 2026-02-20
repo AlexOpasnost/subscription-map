@@ -6,6 +6,7 @@ import { supabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
+import { syncGoogleCalendarEvent } from "@/lib/sync/providers/googleCalendar"
 
 function getBearerToken(req: NextRequest): string | null {
   const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
@@ -256,6 +257,17 @@ export async function POST(req: NextRequest) {
 
     console.log("[assistant/execute] plan insert result", { planId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Plan created", created })
+
+    // Best-effort: immediately sync to Google Calendar (idempotent + logged).
+    try {
+      const planId = String((created as any)?.id ?? "")
+      if (planId) {
+        const sync = await syncGoogleCalendarEvent({ supabase: admin, userId, planId })
+        console.log("[assistant/execute] plan google sync result", { planId, sync })
+      }
+    } catch (err) {
+      console.error("[assistant/execute] plan google sync error", err)
+    }
     return NextResponse.json<ExecuteResponse>({ ok: true, action, message: "Saved plan.", result: { plan: created, id: created.id } })
   }
 
