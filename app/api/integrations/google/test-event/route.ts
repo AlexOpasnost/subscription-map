@@ -90,8 +90,8 @@ export async function POST() {
 
   if (needsRefresh) {
     if (!refreshToken) {
-      console.warn("[integrations/google/test-event] NEEDS_RECONNECT (missing refresh_token)", { userId })
-      return NextResponse.json({ ok: false, error: "NEEDS_RECONNECT" }, { status: 400 })
+      console.warn("[integrations/google/test-event] NO_REFRESH_TOKEN", { userId })
+      return NextResponse.json({ ok: false, error: "NO_REFRESH_TOKEN" }, { status: 400 })
     }
     const refreshedToken = await refreshGoogleAccessToken({ refreshToken })
     accessToken = refreshedToken.accessToken
@@ -116,10 +116,10 @@ export async function POST() {
   }
 
   const calendarId = "primary"
-  const start = new Date(Date.now() + 5 * 60_000)
-  const end = new Date(start.getTime() + 30 * 60_000)
+  const start = new Date(Date.now() + 2 * 60_000)
+  const end = new Date(start.getTime() + 10 * 60_000)
   const body = {
-    summary: "Subscription Map test event",
+    summary: "Subscription Map Test Event",
     start: { dateTime: start.toISOString() },
     end: { dateTime: end.toISOString() },
   }

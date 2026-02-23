@@ -34,8 +34,15 @@ async function shouldPromptForConsent(supabase: SupabaseServerClient, userId: st
 function buildGoogleOauthUrl(input: { userId: string; redirectUri: string; clientId: string; nonce: string; prompt: boolean }) {
   const exp = Math.floor(Date.now() / 1000) + 10 * 60
   const state = signIntegrationState({ userId: input.userId, provider: "google", exp, nonce: input.nonce })
-  // MUST include at least calendar.events; also request full calendar scope for calendar creation.
-  const scope = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar"].join(" ")
+  // MUST include at least calendar.events; also include openid/email/profile for identity.
+  const scope = [
+    "openid",
+    "email",
+    "profile",
+    "https://www.googleapis.com/auth/calendar.events",
+    // Optional but useful (calendar creation / listing).
+    "https://www.googleapis.com/auth/calendar",
+  ].join(" ")
 
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
   url.searchParams.set("client_id", input.clientId)
@@ -48,6 +55,16 @@ function buildGoogleOauthUrl(input: { userId: string; redirectUri: string; clien
   url.searchParams.set("include_granted_scopes", "true")
   url.searchParams.set("state", state)
   return url
+}
+
+function getAppOrigin(req: NextRequest): string {
+  const fromAppUrl = (process.env.APP_URL ?? "").trim()
+  if (fromAppUrl) return new URL(fromAppUrl).origin
+
+  const vercelUrl = (process.env.VERCEL_URL ?? "").trim()
+  if (vercelUrl) return `https://${vercelUrl.replace(/^https?:\/\//, "")}`
+
+  return req.nextUrl.origin || "http://localhost:3000"
 }
 
 export async function GET(req: NextRequest) {
@@ -70,7 +87,7 @@ async function start(req: NextRequest, opts: { redirect: boolean }) {
     // Required env vars (server-only):
     // - GOOGLE_CLIENT_ID
     // - GOOGLE_CLIENT_SECRET (used in callback / token exchange)
-    const appUrl = new URL(requireServerEnv("APP_URL")).origin
+    const appUrl = getAppOrigin(req)
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
 
     const redirectUri = `${appUrl}/api/integrations/google/callback`

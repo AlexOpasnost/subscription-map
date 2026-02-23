@@ -18,7 +18,13 @@ export async function GET(req: NextRequest) {
   // Required env vars (server-only):
   // - GOOGLE_CLIENT_ID
   // - GOOGLE_CLIENT_SECRET
-  const appUrl = new URL(requireServerEnv("APP_URL")).origin
+  const appUrl = (() => {
+    const fromAppUrl = (process.env.APP_URL ?? "").trim()
+    if (fromAppUrl) return new URL(fromAppUrl).origin
+    const vercelUrl = (process.env.VERCEL_URL ?? "").trim()
+    if (vercelUrl) return `https://${vercelUrl.replace(/^https?:\/\//, "")}`
+    return req.nextUrl.origin || "http://localhost:3000"
+  })()
 
   const redirectTo = new URL("/settings/integrations", appUrl)
 
@@ -117,6 +123,7 @@ export async function GET(req: NextRequest) {
 
     console.log(`[integrations/google/callback] google callback: got refresh_token? ${refreshToken ? "yes" : "no"}`)
     console.log(`[integrations/google/callback] user.id=${user.id} expires_at=${expiresAt}`)
+    console.log(`[integrations/google/callback] google callback: scope="${scope ?? ""}"`)
 
     const { data: existingIntegration } = await supabase
       .from("integrations")
