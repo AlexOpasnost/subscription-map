@@ -35,8 +35,8 @@ async function shouldPromptForConsent(supabase: SupabaseServerClient, userId: st
 function buildGoogleOauthUrl(input: { userId: string; redirectUri: string; clientId: string; nonce: string; prompt: boolean }) {
   const exp = Math.floor(Date.now() / 1000) + 10 * 60
   const state = signIntegrationState({ userId: input.userId, provider: "google", exp, nonce: input.nonce })
-  // Use full Calendar scope so we can create calendars + events.
-  const scope = ["https://www.googleapis.com/auth/calendar"].join(" ")
+  // MUST include at least calendar.events; also request full calendar scope for calendar creation.
+  const scope = ["https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/calendar"].join(" ")
 
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth")
   url.searchParams.set("client_id", input.clientId)

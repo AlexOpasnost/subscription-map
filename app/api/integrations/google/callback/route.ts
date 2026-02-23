@@ -116,19 +116,24 @@ export async function GET(req: NextRequest) {
 
     const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString()
 
-    // TEMP DEBUG LOGGING (remove after verification)
-    console.log(`[integrations/google/callback] user.id=${user.id} expires_at=${expiresAt} has_refresh_token=${Boolean(refreshToken)}`)
+    console.log(`[integrations/google/callback] google callback: got refresh_token? ${refreshToken ? "yes" : "no"}`)
+    console.log(`[integrations/google/callback] user.id=${user.id} expires_at=${expiresAt}`)
 
     const { data: existingIntegration } = await supabase
       .from("integrations")
-      .select("id,meta,metadata")
+      .select("id,refresh_token,meta,metadata")
       .eq("user_id", parsedState.userId)
       .eq("provider", "google")
       .maybeSingle()
 
-    // If Google didn't return a refresh_token, preserve the existing one from DB.
+    const existingIntegrationRefresh =
+      isRecord(existingIntegration) && typeof existingIntegration.refresh_token === "string"
+        ? existingIntegration.refresh_token
+        : null
+
+    // If Google didn't return a refresh_token, preserve the existing one from DB (integrations or oauth_tokens).
     // Note: Supabase query builders are thenables (PromiseLike) and don't support `.catch()`.
-    let existingRefreshToken: string | null = null
+    let existingOauthRefreshToken: string | null = null
     if (!refreshToken) {
       try {
         const { data, error } = await supabase
@@ -138,10 +143,10 @@ export async function GET(req: NextRequest) {
           .eq("provider", "google")
           .maybeSingle()
         if (!error) {
-          existingRefreshToken = isRecord(data) && typeof data.refresh_token === "string" ? data.refresh_token : null
+          existingOauthRefreshToken = isRecord(data) && typeof data.refresh_token === "string" ? data.refresh_token : null
         }
       } catch {
-        existingRefreshToken = null
+        existingOauthRefreshToken = null
       }
     }
 
@@ -162,7 +167,7 @@ export async function GET(req: NextRequest) {
 
     // 1) oauth_tokens is the source of truth for Google tokens.
     // True upsert keyed by (user_id, provider), preserving refresh_token when Google doesn't return it.
-    const preservedRefreshToken = refreshToken ?? existingRefreshToken
+    const preservedRefreshToken = refreshToken ?? existingIntegrationRefresh ?? existingOauthRefreshToken
     const { error: tokenUpsertError } = await supabase.from("oauth_tokens").upsert(
       {
         user_id: parsedState.userId,
@@ -177,20 +182,20 @@ export async function GET(req: NextRequest) {
     if (tokenUpsertError) throw tokenUpsertError
     if (!preservedRefreshToken) console.warn(`[integrations/google/callback] missing refresh_token after connect; user_id=${user.id}`)
 
-    // 2) integrations tracks connection status + metadata only (no tokens).
+    // 2) integrations stores provider connection + tokens (back-compat for deployments relying on integrations.*_token).
     const integrationsUpsertBase = {
       user_id: parsedState.userId,
       provider: "google",
+      access_token: accessToken,
+      refresh_token: preservedRefreshToken ?? null,
       // Some schemas use `connected` boolean; prefer it when present.
       connected: true,
       status: "connected",
       expires_at: expiresAt,
+      connected_at: new Date().toISOString(),
       scopes: scopesArr,
       meta: nextMeta,
       metadata: nextMetadata,
-      // Keep tokens OUT of integrations. access_token is NOT NULL in older schemas, so store empty string.
-      access_token: "",
-      refresh_token: null,
       scope: scope ?? null,
     }
 
@@ -207,8 +212,8 @@ export async function GET(req: NextRequest) {
           {
             user_id: parsedState.userId,
             provider: "google",
-            access_token: "",
-            refresh_token: null,
+            access_token: accessToken,
+            refresh_token: preservedRefreshToken ?? null,
             expires_at: expiresAt,
             scope: scope ?? null,
             meta: nextMeta,
@@ -220,6 +225,12 @@ export async function GET(req: NextRequest) {
       }
     }
     if (integrationsError) throw integrationsError
+
+    console.log(
+      `[integrations/google/callback] integration upserted: user_id=${user.id} has_refresh_token=${Boolean(
+        preservedRefreshToken && preservedRefreshToken.trim()
+      )}`
+    )
 
     redirectTo.searchParams.set("connected", "google")
     const res = NextResponse.redirect(redirectTo)
