@@ -180,6 +180,7 @@ type TaskRow = { id: string; title: string; due_at: string | null; meta: unknown
 type PlanRow = { id: string; title: string; start_date: string | null; end_date: string | null; meta: unknown }
 type SubscriptionRow = { id: string; service: string; renewal_date: string | null; reminder_days: number | null; meta: unknown }
 type PersonRow = { id: string; name: string; birth_date: string | null; meta?: unknown }
+type ReminderRow = { id: string; title: string; remind_at: string | null }
 
 async function updateRecordMeta(
   supabase: SupabaseClient,
@@ -557,6 +558,38 @@ export async function pushToGoogleCalendar(
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "person", targetId: person.id, externalId: eventId })
     await input.log(`Saved google_event_id=${eventId}`)
+    return { eventId }
+  }
+
+  if (targetType === "reminder") {
+    const { data, error } = await supabase.from("reminders").select("id,title,remind_at").eq("id", targetId).single()
+    if (error) throw error
+    const reminder = data as ReminderRow
+    const remindAt = reminder.remind_at
+    if (!remindAt) {
+      await input.log("Reminder has no remind_at; skipping Google Calendar event.")
+      return { eventId: undefined }
+    }
+
+    const start = new Date(remindAt)
+    if (Number.isNaN(start.getTime())) {
+      await input.log("Reminder remind_at is invalid; skipping.")
+      return { eventId: undefined }
+    }
+
+    const existingEventId =
+      (await getExternalId(supabase, { userId, provider: "google", targetType: "reminder", targetId: reminder.id })) ?? null
+    const end = new Date(start.getTime() + 15 * 60 * 1000)
+    const body = {
+      summary: reminder.title,
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+    }
+
+    await input.log(existingEventId ? "Updating Google Calendar event for reminder…" : "Creating Google Calendar event for reminder…")
+    const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
+    await upsertExternalId(supabase, { userId, provider: "google", targetType: "reminder", targetId: reminder.id, externalId: eventId })
+    await input.log(`Saved reminder external_link eventId=${eventId}`)
     return { eventId }
   }
 

@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import crypto from "crypto"
 
 import { signIntegrationState } from "@/lib/integrations/state"
-import { requireAppUrlOrigin, requireServerEnv } from "@/lib/env"
-import { getAppOriginFromRequest } from "@/lib/integrations/getAppOrigin"
+import { requireServerEnv } from "@/lib/env"
 import { supabaseServer } from "@/lib/supabase/server"
 
 const STATE_COOKIE = "sm_google_oauth_nonce"
@@ -71,7 +70,7 @@ async function start(req: NextRequest, opts: { redirect: boolean }) {
     // Required env vars (server-only):
     // - GOOGLE_CLIENT_ID
     // - GOOGLE_CLIENT_SECRET (used in callback / token exchange)
-    const appUrl = requireAppUrlOrigin() || getAppOriginFromRequest(req)
+    const appUrl = new URL(requireServerEnv("APP_URL")).origin
     const clientId = requireServerEnv("GOOGLE_CLIENT_ID")
 
     const redirectUri = `${appUrl}/api/integrations/google/callback`
