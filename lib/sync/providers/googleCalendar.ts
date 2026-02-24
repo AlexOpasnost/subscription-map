@@ -77,6 +77,16 @@ async function ensureGoogleAccessToken(
     .single()
 
   if (error) throw error
+  // Keep integrations access_token/expires_at in sync (best-effort; never fail sync on this).
+  try {
+    await supabase
+      .from("integrations")
+      .update({ access_token: accessToken, expires_at: expiresAtIso })
+      .eq("user_id", tokens.user_id)
+      .eq("provider", "google")
+  } catch {
+    // ignore
+  }
   return { accessToken, tokens: data as OAuthTokenRow }
 }
 
@@ -176,9 +186,25 @@ async function upsertEvent(
   return { eventId: id }
 }
 
-type TaskRow = { id: string; title: string; due_at: string | null; meta: unknown }
+type TaskRow = {
+  id: string
+  title: string
+  due_at: string | null
+  due_date?: string | null
+  google_event_id?: string | null
+  google_calendar_id?: string | null
+  meta: unknown
+}
 type PlanRow = { id: string; title: string; start_date: string | null; end_date: string | null; meta: unknown }
-type SubscriptionRow = { id: string; service: string; renewal_date: string | null; reminder_days: number | null; meta: unknown }
+type SubscriptionRow = {
+  id: string
+  service: string
+  renewal_date: string | null
+  reminder_days: number | null
+  google_event_id?: string | null
+  google_calendar_id?: string | null
+  meta: unknown
+}
 type PersonRow = { id: string; name: string; birth_date: string | null; meta?: unknown }
 type ReminderRow = { id: string; title: string; remind_at: string | null }
 
@@ -365,7 +391,7 @@ export async function pushToGoogleCalendar(
   input: { action: SyncAction; targetType: string; targetId: string; log: (msg: string) => Promise<void> }
 ): Promise<{ eventId?: string }> {
   const meta = getObject(integration.metadata ?? integration.meta)
-  const calendarId = getString(meta.calendar_id) || "primary"
+  const integrationCalendarId = getString(meta.calendar_id) || "primary"
   const { data: tokens, error: tokenErr } = await supabase
     .from("oauth_tokens")
     .select("id,user_id,provider,access_token,refresh_token,expires_at,scope")
@@ -404,11 +430,40 @@ export async function pushToGoogleCalendar(
       return null
     }
     const eventId = existing || (await existingFromMeta())
-    if (eventId) {
+    // Attempt to read column-based event id for tasks/subscriptions if present (best-effort).
+    let columnEventId: string | null = null
+    let columnCalendarId: string | null = null
+    try {
+      if (targetType === "task") {
+        const { data } = await supabase.from("tasks").select("google_event_id,google_calendar_id").eq("id", targetId).maybeSingle()
+        columnEventId = data ? getString((data as any).google_event_id) : null
+        columnCalendarId = data ? getString((data as any).google_calendar_id) : null
+      }
+      if (targetType === "subscription") {
+        const { data } = await supabase
+          .from("subscriptions")
+          .select("google_event_id,google_calendar_id")
+          .eq("id", targetId)
+          .maybeSingle()
+        columnEventId = data ? getString((data as any).google_event_id) : null
+        columnCalendarId = data ? getString((data as any).google_calendar_id) : null
+      }
+    } catch {
+      // ignore
+    }
+
+    const effectiveCalendarId = (columnCalendarId || integrationCalendarId || "primary").trim() || "primary"
+    const effectiveEventId = (columnEventId || eventId || "").trim() || null
+
+    if (effectiveEventId) {
       await input.log("Deleting Google Calendar event…")
-      await googleCalendarRequest(accessToken, `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}?sendUpdates=none`, {
+      await googleCalendarRequest(
+        accessToken,
+        `/calendars/${encodeURIComponent(effectiveCalendarId)}/events/${encodeURIComponent(effectiveEventId)}?sendUpdates=none`,
+        {
         method: "DELETE",
-      })
+        }
+      )
     }
     await deleteExternalId(supabase, { userId, provider: "google", targetType, targetId })
     await input.log("Deleted external link.")
@@ -416,41 +471,63 @@ export async function pushToGoogleCalendar(
   }
 
   if (targetType === "task") {
-    const { data, error } = await supabase.from("tasks").select("id,title,due_at,due_date,meta").eq("id", targetId).single()
-    if (error) throw error
+    // Prefer new columns (google_event_id/calendar_id); fall back gracefully if migration not applied.
+    let data: unknown = null
+    let error: unknown = null
+    {
+      const res = await supabase.from("tasks").select("id,title,due_at,due_date,google_event_id,google_calendar_id,meta").eq("id", targetId).maybeSingle()
+      data = res.data
+      error = res.error
+      if (res.error && String((res.error as any)?.message ?? "").toLowerCase().includes("column")) {
+        const fallback = await supabase.from("tasks").select("id,title,due_at,due_date,meta").eq("id", targetId).single()
+        data = fallback.data
+        error = fallback.error
+      }
+    }
+    if (error) throw error as any
+    if (!data) throw new Error("Task not found")
     const task = data as TaskRow
     const dueAt = task.due_at
-    const dueDate = typeof (task as any).due_date === "string" ? String((task as any).due_date) : null
-    const dueAtIso =
-      dueAt && String(dueAt).trim()
-        ? String(dueAt)
-        : dueDate && dueDate.trim()
-          ? new Date(`${dueDate}T09:00:00.000Z`).toISOString()
-          : null
-    if (!dueAtIso) {
+    const dueDate = typeof (task as any).due_date === "string" ? String((task as any).due_date).trim() : ""
+
+    if (!dueAt && !dueDate) {
       await input.log("Task has no due_at/due_date; skipping Google Calendar event.")
       return {}
     }
 
+    const calendarId = (typeof (task as any).google_calendar_id === "string" ? String((task as any).google_calendar_id) : integrationCalendarId) || "primary"
+    const columnEventId = typeof (task as any).google_event_id === "string" ? String((task as any).google_event_id).trim() : ""
     const existingEventId =
-      (await getExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id })) ??
-      getString(getObject(task.meta).google_event_id)
-    const due = new Date(dueAtIso)
-    if (Number.isNaN(due.getTime())) {
-      await input.log("Task due_at is invalid; skipping.")
-      return {}
-    }
+      (columnEventId || (await getExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id })) || getString(getObject(task.meta).google_event_id)).trim() ||
+      undefined
 
-    const end = new Date(due.getTime() + 30 * 60 * 1000)
-    const body = {
-      summary: task.title,
-      start: { dateTime: due.toISOString() },
-      end: { dateTime: end.toISOString() },
+    const body = (() => {
+      if (dueAt && String(dueAt).trim()) {
+        const due = new Date(String(dueAt))
+        if (Number.isNaN(due.getTime())) return null
+        const end = new Date(due.getTime() + 30 * 60 * 1000)
+        return { summary: task.title, start: { dateTime: due.toISOString() }, end: { dateTime: end.toISOString() } }
+      }
+      if (dueDate) {
+        const endExclusive = addDaysIsoDate(dueDate, 1)
+        return { summary: task.title, start: { date: dueDate }, end: { date: endExclusive } }
+      }
+      return null
+    })()
+    if (!body) {
+      await input.log("Task due_at/due_date is invalid; skipping.")
+      return {}
     }
 
     await input.log(existingEventId ? "Updating Google Calendar event for task…" : "Creating Google Calendar event for task…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id, externalId: eventId })
+    // Persist idempotency columns (preferred). Also keep meta in sync (back-compat).
+    try {
+      await supabase.from("tasks").update({ google_event_id: eventId, google_calendar_id: calendarId } as any).eq("id", task.id)
+    } catch {
+      // ignore
+    }
     const nextMeta = { ...getObject(task.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "tasks", task.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
@@ -479,6 +556,7 @@ export async function pushToGoogleCalendar(
       end: { date: endExclusive },
     }
 
+    const calendarId = integrationCalendarId || "primary"
     await input.log(existingEventId ? "Updating Google Calendar event for plan…" : "Creating Google Calendar event for plan…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "plan", targetId: plan.id, externalId: eventId })
@@ -489,21 +567,40 @@ export async function pushToGoogleCalendar(
   }
 
   if (targetType === "subscription") {
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("id,service,renewal_date,reminder_days,meta")
-      .eq("id", targetId)
-      .single()
-    if (error) throw error
+    let data: unknown = null
+    let error: unknown = null
+    {
+      const res = await supabase
+        .from("subscriptions")
+        .select("id,service,renewal_date,reminder_days,google_event_id,google_calendar_id,meta")
+        .eq("id", targetId)
+        .maybeSingle()
+      data = res.data
+      error = res.error
+      if (res.error && String((res.error as any)?.message ?? "").toLowerCase().includes("column")) {
+        const fallback = await supabase
+          .from("subscriptions")
+          .select("id,service,renewal_date,reminder_days,meta")
+          .eq("id", targetId)
+          .single()
+        data = fallback.data
+        error = fallback.error
+      }
+    }
+    if (error) throw error as any
+    if (!data) throw new Error("Subscription not found")
     const sub = data as SubscriptionRow
     if (!sub.renewal_date) {
       await input.log("Subscription has no renewal_date; skipping Google Calendar event.")
       return { eventId: undefined }
     }
 
+    const calendarId =
+      (typeof (sub as any).google_calendar_id === "string" ? String((sub as any).google_calendar_id) : integrationCalendarId) || "primary"
+    const columnEventId = typeof (sub as any).google_event_id === "string" ? String((sub as any).google_event_id).trim() : ""
     const existingEventId =
-      (await getExternalId(supabase, { userId, provider: "google", targetType: "subscription", targetId: sub.id })) ??
-      getString(getObject(sub.meta).google_event_id)
+      (columnEventId || (await getExternalId(supabase, { userId, provider: "google", targetType: "subscription", targetId: sub.id })) || getString(getObject(sub.meta).google_event_id)).trim() ||
+      undefined
 
     const reminderDays = typeof sub.reminder_days === "number" && sub.reminder_days > 0 ? Math.floor(sub.reminder_days) : 0
     const eventDate = reminderDays > 0 ? addDaysIsoDate(sub.renewal_date, -reminderDays) : sub.renewal_date
@@ -517,6 +614,11 @@ export async function pushToGoogleCalendar(
     await input.log(existingEventId ? "Updating Google Calendar event for subscription…" : "Creating Google Calendar event for subscription…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "subscription", targetId: sub.id, externalId: eventId })
+    try {
+      await supabase.from("subscriptions").update({ google_event_id: eventId, google_calendar_id: calendarId } as any).eq("id", sub.id)
+    } catch {
+      // ignore
+    }
     const nextMeta = { ...getObject(sub.meta), google_event_id: eventId }
     await updateRecordMeta(supabase, "subscriptions", sub.id, nextMeta)
     await input.log(`Saved google_event_id=${eventId}`)
@@ -554,6 +656,7 @@ export async function pushToGoogleCalendar(
       end: { date: endExclusive },
       recurrence: ["RRULE:FREQ=YEARLY"],
     }
+    const calendarId = integrationCalendarId || "primary"
     await input.log(existingEventId ? "Updating Google Calendar event for birthday…" : "Creating Google Calendar event for birthday…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "person", targetId: person.id, externalId: eventId })
@@ -586,6 +689,7 @@ export async function pushToGoogleCalendar(
       end: { dateTime: end.toISOString() },
     }
 
+    const calendarId = integrationCalendarId || "primary"
     await input.log(existingEventId ? "Updating Google Calendar event for reminder…" : "Creating Google Calendar event for reminder…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
     await upsertExternalId(supabase, { userId, provider: "google", targetType: "reminder", targetId: reminder.id, externalId: eventId })
