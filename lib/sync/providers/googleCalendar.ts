@@ -218,6 +218,34 @@ async function updateRecordMeta(
   if (error) throw error
 }
 
+function buildGoogleEventFromTask(task: TaskRow): { summary: string; start: Record<string, unknown>; end: Record<string, unknown> } | null {
+  const title = typeof (task as any)?.title === "string" ? String((task as any).title) : "Task"
+
+  const dueAtRaw = task.due_at && String(task.due_at).trim() ? String(task.due_at) : ""
+  if (dueAtRaw) {
+    const start = new Date(dueAtRaw)
+    if (Number.isNaN(start.getTime())) return null
+    const end = new Date(start.getTime() + 30 * 60 * 1000)
+    return {
+      summary: title,
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+    }
+  }
+
+  const dueDateRaw = typeof (task as any)?.due_date === "string" ? String((task as any).due_date).trim() : ""
+  if (dueDateRaw) {
+    const endExclusive = addDaysIsoDate(dueDateRaw, 1)
+    return {
+      summary: title,
+      start: { date: dueDateRaw },
+      end: { date: endExclusive },
+    }
+  }
+
+  return null
+}
+
 export async function syncGoogleCalendarEvent(input: {
   supabase: SupabaseClient
   userId: string
@@ -487,10 +515,8 @@ export async function pushToGoogleCalendar(
     if (error) throw error as any
     if (!data) throw new Error("Task not found")
     const task = data as TaskRow
-    const dueAt = task.due_at
-    const dueDate = typeof (task as any).due_date === "string" ? String((task as any).due_date).trim() : ""
-
-    if (!dueAt && !dueDate) {
+    const body = buildGoogleEventFromTask(task)
+    if (!body) {
       await input.log("Task has no due_at/due_date; skipping Google Calendar event.")
       return {}
     }
@@ -500,24 +526,6 @@ export async function pushToGoogleCalendar(
     const existingEventId =
       (columnEventId || (await getExternalId(supabase, { userId, provider: "google", targetType: "task", targetId: task.id })) || getString(getObject(task.meta).google_event_id)).trim() ||
       undefined
-
-    const body = (() => {
-      if (dueAt && String(dueAt).trim()) {
-        const due = new Date(String(dueAt))
-        if (Number.isNaN(due.getTime())) return null
-        const end = new Date(due.getTime() + 30 * 60 * 1000)
-        return { summary: task.title, start: { dateTime: due.toISOString() }, end: { dateTime: end.toISOString() } }
-      }
-      if (dueDate) {
-        const endExclusive = addDaysIsoDate(dueDate, 1)
-        return { summary: task.title, start: { date: dueDate }, end: { date: endExclusive } }
-      }
-      return null
-    })()
-    if (!body) {
-      await input.log("Task due_at/due_date is invalid; skipping.")
-      return {}
-    }
 
     await input.log(existingEventId ? "Updating Google Calendar event for task…" : "Creating Google Calendar event for task…")
     const { eventId } = await upsertEvent(accessToken, { calendarId, existingEventId: existingEventId || undefined, body })
