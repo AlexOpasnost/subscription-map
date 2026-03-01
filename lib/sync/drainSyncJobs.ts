@@ -14,6 +14,29 @@ function parseAction(v: unknown): SyncAction | null {
   return v === "upsert" || v === "delete" ? v : null
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null
+}
+
+function legacyTargetTypeFromAction(action: string): string | null {
+  const a = action.trim().toLowerCase()
+  if (a === "push_task") return "task"
+  if (a === "push_subscription") return "subscription"
+  if (a === "push_plan") return "plan"
+  if (a === "push_person") return "person"
+  if (a === "push_reminder") return "reminder"
+  return null
+}
+
+function legacyTargetIdFromPayload(payload: unknown): string | null {
+  if (!isRecord(payload)) return null
+  const recordId = typeof payload.record_id === "string" ? payload.record_id : ""
+  if (recordId.trim()) return recordId.trim()
+  const recordIdAlt = typeof payload.recordId === "string" ? payload.recordId : ""
+  if (recordIdAlt.trim()) return recordIdAlt.trim()
+  return null
+}
+
 export async function insertSyncLog(
   supabase: SupabaseClient,
   job: { id: string; user_id: string },
@@ -47,9 +70,15 @@ async function processJob(
   job: SyncJobRow
 ): Promise<{ eventId?: string }> {
   const provider = parseProvider(job.provider)
-  const action = parseAction(job.action)
-  const targetType = typeof (job as any).target_type === "string" ? String((job as any).target_type) : ""
-  const targetId = typeof (job as any).target_id === "string" ? String((job as any).target_id) : ""
+  const action = parseAction((job as any).action) ?? "upsert"
+
+  // Be robust to older rows where v2 fields may be null/empty.
+  const targetTypeRaw = typeof (job as any).target_type === "string" ? String((job as any).target_type) : ""
+  const targetIdRaw = typeof (job as any).target_id === "string" ? String((job as any).target_id) : ""
+  const legacyType = typeof (job as any).legacy_action === "string" ? legacyTargetTypeFromAction(String((job as any).legacy_action)) : null
+  const legacyId = legacyTargetIdFromPayload((job as any).legacy_payload)
+  const targetType = targetTypeRaw.trim() || legacyType || ""
+  const targetId = targetIdRaw.trim() || legacyId || ""
   if (!provider || !action || !targetType || !targetId) {
     throw new Error("Invalid job payload")
   }
@@ -70,7 +99,8 @@ async function processJob(
     await insertSyncLog(supabase, job, message)
   }
 
-  await log(`Running ${provider}:${action} for ${targetType}:${targetId}`)
+  const usedLegacy = !targetTypeRaw.trim() || !targetIdRaw.trim()
+  await log(`Running ${provider}:${action} for ${targetType}:${targetId}${usedLegacy ? " (derived from legacy_*)" : ""}`)
 
   if (provider === "google") {
     const out = await pushToGoogleCalendar(supabase, integration as IntegrationRow, { action, targetType, targetId, log })
@@ -174,7 +204,7 @@ export async function drainSyncJobs(
       await supabase.from("sync_jobs").update({ attempts: (job.attempts ?? 0) + 1 }).eq("id", job.id)
       await insertSyncLog(supabase, job, "Started")
       const out = await processJob(supabase, job)
-      await insertSyncLog(supabase, job, "Completed OK")
+      await insertSyncLog(supabase, job, out?.eventId ? `Completed OK eventId=${out.eventId}` : "Completed OK (no eventId)")
       await markOk(supabase, job.id)
       await logAssistantActivity(supabase, {
         userId: job.user_id,
