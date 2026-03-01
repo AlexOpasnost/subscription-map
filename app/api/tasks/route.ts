@@ -2,8 +2,7 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
 import { supabaseServer } from "@/lib/supabase/server"
-import { pushToGoogleCalendar } from "@/lib/sync/providers/googleCalendar"
-import type { IntegrationRow } from "@/lib/sync/types"
+import { GoogleReconnectRequiredError, upsertGoogleCalendarEventForUser } from "@/lib/google/calendar"
 
 type TaskRow = {
   id: string
@@ -116,31 +115,37 @@ export async function POST(req: NextRequest) {
   let google: { ok: boolean; status?: string; eventId?: string; error?: string } | null = null
   if (shouldSyncGoogleForTask) {
     try {
-      const { data: integration } = await supabase
-        .from("integrations")
-        .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at,status")
-        .eq("user_id", user.id)
-        .eq("provider", "google")
-        .maybeSingle()
+      const out = await upsertGoogleCalendarEventForUser(supabase, {
+        userId: user.id,
+        title: created.title,
+        dueAt: (created as any)?.due_at ?? null,
+        dueDate: (created as any)?.due_date ?? null,
+        calendarId: "primary",
+        existingEventId: null,
+      })
 
-      const status = typeof (integration as any)?.status === "string" ? String((integration as any).status) : ""
-      if (!integration || (status && status.toLowerCase() === "disconnected")) {
-        google = { ok: false, error: "NOT_CONNECTED" }
-      } else {
-        const out = await pushToGoogleCalendar(supabase, integration as unknown as IntegrationRow, {
-          action: "upsert",
-          targetType: "task",
-          targetId: created.id,
-          log: async (msg: string) => {
-            console.log(`[tasks] google sync user_id=${user.id} task_id=${created.id} ${msg}`)
-          },
-        })
-        google = { ok: true, status: "ok", eventId: out?.eventId }
-      }
+      // Persist idempotency columns.
+      await supabase.from("tasks").update({ google_event_id: out.eventId, google_calendar_id: out.calendarId }).eq("id", created.id)
+
+      console.log("[tasks] google push ok", { userId: user.id, taskId: created.id, kind: out.kind, eventId: out.eventId })
+      google = { ok: true, status: "ok", eventId: out.eventId }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Google sync failed"
-      console.error("[tasks] google sync failed", { userId: user.id, taskId: created.id, error: msg })
-      google = { ok: false, error: msg.includes("Missing refresh token") ? "NEEDS_RECONNECT" : msg }
+      if (err instanceof GoogleReconnectRequiredError) {
+        console.warn("[tasks] google push skipped (NO_REFRESH_TOKEN)", { userId: user.id, taskId: created.id })
+        google = { ok: false, error: "NEEDS_RECONNECT" }
+      } else {
+        const msg = err instanceof Error ? err.message : "Google push failed"
+        if (msg === "GOOGLE_NOT_CONNECTED") {
+          console.log("[tasks] google not connected", { userId: user.id, taskId: created.id })
+          google = { ok: false, error: "NOT_CONNECTED" }
+        } else if (msg === "MISSING_DUE_AT_OR_DUE_DATE") {
+          console.log("[tasks] google push skipped (no due)", { userId: user.id, taskId: created.id })
+          google = { ok: false, error: "SKIPPED_NO_DUE" }
+        } else {
+          console.error("[tasks] google push failed", { userId: user.id, taskId: created.id, error: msg })
+          google = { ok: false, error: msg }
+        }
+      }
     }
   }
 

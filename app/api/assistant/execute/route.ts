@@ -7,6 +7,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
 import { syncGoogleCalendarEvent } from "@/lib/sync/providers/googleCalendar"
+import { GoogleReconnectRequiredError, upsertGoogleCalendarEventForUser } from "@/lib/google/calendar"
 
 function getBearerToken(req: NextRequest): string | null {
   const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
@@ -189,6 +190,30 @@ export async function POST(req: NextRequest) {
     console.log("[assistant/execute] task insert result", { taskId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Task created", created, reminderId })
     await maybeEnqueueGoogleSync({ targetType: "task", targetId: created.id })
+
+    // Best-effort: immediately push to Google Calendar (no pending sync job required).
+    try {
+      const taskId = String((created as any)?.id ?? "")
+      if (taskId) {
+        const kind = dueDate ? "all_day" : "timed"
+        const out = await upsertGoogleCalendarEventForUser(admin, {
+          userId,
+          title: action.title,
+          dueAt: null,
+          dueDate,
+          calendarId: "primary",
+          existingEventId: null,
+        })
+        await admin.from("tasks").update({ google_event_id: out.eventId, google_calendar_id: out.calendarId }).eq("id", taskId)
+        console.log("[assistant/execute] google push task ok", { userId, taskId, kind, eventId: out.eventId })
+      }
+    } catch (err: unknown) {
+      if (err instanceof GoogleReconnectRequiredError) {
+        console.warn("[assistant/execute] google push task skipped (NO_REFRESH_TOKEN)", { userId })
+      } else {
+        console.error("[assistant/execute] google push task failed", err)
+      }
+    }
     return NextResponse.json<ExecuteResponse>({
       ok: true,
       action,
