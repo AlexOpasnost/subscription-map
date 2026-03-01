@@ -130,7 +130,7 @@ export async function drainSyncJobs(
   input?: { onlyUserId?: string | null; limit?: number }
 ): Promise<DrainSyncJobsResult> {
   const onlyUserId = input?.onlyUserId ?? null
-  const limit = typeof input?.limit === "number" && input.limit > 0 ? Math.floor(input.limit) : 20
+  const limit = typeof input?.limit === "number" && input.limit > 0 ? Math.floor(input.limit) : 10
 
   const baseSelect =
     "id,user_id,provider,target_type,target_id,action,status,attempts,last_error,legacy_status,legacy_action,legacy_payload,created_at,updated_at"

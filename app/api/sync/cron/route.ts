@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin()
 
   try {
-    const out = await drainSyncJobs(supabase, { onlyUserId: null, limit: 20 })
+    const out = await drainSyncJobs(supabase, { onlyUserId: null, limit: 10 })
     return NextResponse.json(out)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Cron sync failed"

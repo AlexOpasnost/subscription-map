@@ -263,7 +263,7 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
 
     try {
-      const out = await drainSyncJobs(supabase, { onlyUserId: user.id, limit: 20 })
+      const out = await drainSyncJobs(supabase, { onlyUserId: user.id, limit: 10 })
       return NextResponse.json(out)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Sync drain failed"
@@ -298,15 +298,14 @@ export async function POST(req: NextRequest) {
       // Verify Google integration exists (connected).
       const { data: integration, error: intErr } = await supabase
         .from("integrations")
-        .select("id,user_id,provider,status,connected,meta,metadata,created_at,access_token,refresh_token,expires_at,scope")
+        .select("id,user_id,provider,status,meta,metadata,created_at,access_token,refresh_token,expires_at,scope")
         .eq("user_id", userId)
         .eq("provider", "google")
         .maybeSingle()
       if (intErr) return NextResponse.json({ error: intErr.message }, { status: 500 })
       if (!integration) return NextResponse.json({ error: "Google integration not connected." }, { status: 400 })
       const status = typeof (integration as any).status === "string" ? String((integration as any).status).toLowerCase() : ""
-      const connected = typeof (integration as any).connected === "boolean" ? Boolean((integration as any).connected) : null
-      if (connected === false || status === "disconnected") {
+      if (status === "disconnected") {
         return NextResponse.json({ error: "Google integration is disconnected." }, { status: 400 })
       }
 

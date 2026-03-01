@@ -29,7 +29,7 @@ export async function enqueueSyncJobs(
 ): Promise<{ enqueued: number; jobIds?: string[] }> {
   const { data: integrations, error: integrationsError } = await supabase
     .from("integrations")
-    .select("provider,status,connected,meta,metadata")
+    .select("provider,status,meta,metadata")
     .eq("user_id", input.userId)
 
   if (integrationsError) {
@@ -41,13 +41,11 @@ export async function enqueueSyncJobs(
     .map((r) => ({
       provider: typeof (r as { provider?: unknown }).provider === "string" ? ((r as { provider: string }).provider as string) : "",
       status: typeof (r as { status?: unknown }).status === "string" ? String((r as { status: string }).status) : "",
-      connected: typeof (r as { connected?: unknown }).connected === "boolean" ? Boolean((r as { connected: boolean }).connected) : null,
       meta: (r as { meta?: unknown }).meta,
       metadata: (r as { metadata?: unknown }).metadata,
     }))
     .filter((r) => r.provider === "google" || r.provider === "notion")
     .filter((r) => {
-      if (r.connected === false) return false
       if (r.status && r.status.toLowerCase() === "disconnected") return false
       return true
     })
