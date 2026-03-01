@@ -74,7 +74,11 @@ Syncing is async: user actions enqueue rows into `sync_jobs`. A server route pro
 
 - `POST /api/sync/run` (or `GET /api/sync/run`)
 
-Suggested Vercel Cron schedule: every 5 minutes call `/api/sync/run` with:
+### Vercel Cron
 
-- `Authorization: Bearer ${SYNC_RUN_SECRET}` (recommended)
+Vercel Cron can’t send custom `Authorization` headers. Use the dedicated cron endpoint:
+
+- `POST /api/sync/cron?secret=${SYNC_CRON_SECRET}`
+
+Suggested schedule: every 5 minutes.
 

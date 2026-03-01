@@ -7,6 +7,7 @@ import { pushToNotion } from "@/lib/sync/providers/notion"
 import type { IntegrationRow, Provider, SyncAction, SyncJobRow } from "@/lib/sync/types"
 import { requireServerEnv } from "@/lib/env"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
+import { drainSyncJobs } from "@/lib/sync/drainSyncJobs"
 
 function getBearerToken(req: NextRequest): string | null {
   const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
@@ -244,6 +245,32 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const supabase = getSupabaseAdmin()
+  const mode = req.nextUrl.searchParams.get("mode")?.trim() ?? ""
+
+  /**
+   * Verification (prod):
+   * A) While logged in, call `POST /api/sync/run?mode=drain` and expect processed>0.
+   * B) SQL: check sync_jobs move pending -> ok/error and sync_logs is non-empty.
+   * C) Tasks with due_date should get google_event_id set after ok jobs.
+   */
+
+  // Drain mode (cookie-auth): drain queued jobs for the current user.
+  if (mode === "drain") {
+    const authSb = await supabaseServer()
+    const {
+      data: { user },
+    } = await authSb.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+
+    try {
+      const out = await drainSyncJobs(supabase, { onlyUserId: user.id, limit: 20 })
+      return NextResponse.json(out)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Sync drain failed"
+      console.error("[sync/run] drain failed", { userId: user.id, error: msg })
+      return NextResponse.json({ error: msg }, { status: 500 })
+    }
+  }
 
   // Manual (UI) sync: cookie-authenticated user on Vercel.
   try {
@@ -406,90 +433,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const baseSelect =
-    "id,user_id,provider,target_type,target_id,action,status,attempts,last_error,legacy_status,legacy_action,legacy_payload,created_at,updated_at"
-
-  const { data: jobs, error } = onlyUserId
-    ? await supabase
-        .from("sync_jobs")
-        .select(baseSelect)
-        .eq("user_id", onlyUserId)
-        .eq("status", "pending")
-        .lt("attempts", 10)
-        .or("legacy_status.is.null,legacy_status.eq.queued")
-        .order("created_at", { ascending: true })
-        .limit(10)
-    : await supabase
-        .from("sync_jobs")
-        .select(baseSelect)
-        .eq("status", "pending")
-        .lt("attempts", 10)
-        .or("legacy_status.is.null,legacy_status.eq.queued")
-        .order("created_at", { ascending: true })
-        .limit(10)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    const out = await drainSyncJobs(supabase, { onlyUserId, limit: 20 })
+    return NextResponse.json(out)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Sync failed"
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  const queued = (jobs ?? []) as SyncJobRow[]
-  let processed = 0
-  let ok = 0
-  let failed = 0
-  const results: Array<{
-    id: string
-    provider?: string
-    target_type?: string
-    target_id?: string
-    status: "skipped" | "ok" | "error"
-    error?: string
-  }> = []
-
-  for (const job of queued) {
-    const claimed = await claimJob(supabase, job.id)
-    if (!claimed) {
-      results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "skipped" })
-      continue
-    }
-    processed += 1
-    try {
-      // Increment attempts early (best-effort) so retries are bounded even if execution crashes mid-flight.
-      await supabase.from("sync_jobs").update({ attempts: (job.attempts ?? 0) + 1 }).eq("id", job.id)
-      await insertLog(supabase, job, "Started")
-      const out = await processJob(supabase, job)
-      await insertLog(supabase, job, "Completed OK")
-      await markOk(supabase, job.id)
-      await logAssistantActivity(supabase, {
-        userId: job.user_id,
-        kind: "job_executed",
-        command: `sync job executed: ${job.provider}`,
-        result: { jobId: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "ok" },
-      })
-      if (job.provider === "google" && out?.eventId) {
-        await logAssistantActivity(supabase, {
-          userId: job.user_id,
-          kind: "google_event_created",
-          command: "google calendar event created",
-          result: { jobId: job.id, calendarEventId: out.eventId, target_type: (job as any).target_type, target_id: (job as any).target_id },
-        })
-      }
-      ok += 1
-      results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "ok" })
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Sync failed"
-      await insertLog(supabase, job, `Error: ${msg}`)
-      await markError(supabase, job.id, msg)
-      failed += 1
-      results.push({ id: job.id, provider: job.provider, target_type: (job as any).target_type, target_id: (job as any).target_id, status: "error", error: msg })
-    }
-  }
-
-  return NextResponse.json({
-    processed,
-    ok,
-    failed,
-    remaining_hint: Math.max(0, queued.length - processed),
-    results,
-  })
 }
 

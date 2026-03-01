@@ -265,7 +265,7 @@ export default function IntegrationsPage() {
     if (retrying) return
     setRetrying(true)
     try {
-      const res = await fetch("/api/sync/run", { method: "POST", credentials: "include" })
+      const res = await fetch("/api/sync/run?mode=drain", { method: "POST", credentials: "include" })
       const json: unknown = await res.json()
       if (!res.ok) throw new Error(apiError(json, res))
       const processed = isRecord(json) && typeof json.processed === "number" ? json.processed : 0
