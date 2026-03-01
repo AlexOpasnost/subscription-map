@@ -260,7 +260,12 @@ export async function POST(req: NextRequest) {
     const {
       data: { user },
     } = await authSb.auth.getUser()
-    if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    if (!user) {
+      return NextResponse.json(
+        { processed: 0, ok: 0, failed: 0, results: [], error: "Not authenticated" },
+        { status: 401 }
+      )
+    }
 
     try {
       const out = await drainSyncJobs(supabase, { onlyUserId: user.id, limit: 10 })
@@ -268,7 +273,8 @@ export async function POST(req: NextRequest) {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Sync drain failed"
       console.error("[sync/run] drain failed", { userId: user.id, error: msg })
-      return NextResponse.json({ error: msg }, { status: 500 })
+      // Always return a summary object so callers can render status.
+      return NextResponse.json({ processed: 0, ok: 0, failed: 0, results: [], error: msg }, { status: 200 })
     }
   }
 
