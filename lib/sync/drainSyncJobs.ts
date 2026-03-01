@@ -56,7 +56,7 @@ async function processJob(
 
   const { data: integration, error: integrationError } = await supabase
     .from("integrations")
-    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at,status,connected")
+    .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at,status")
     .eq("user_id", job.user_id)
     .eq("provider", provider)
     .maybeSingle()
@@ -64,8 +64,7 @@ async function processJob(
   if (integrationError) throw integrationError
   if (!integration) throw new Error(`Integration not connected: ${provider}`)
   const status = typeof (integration as any).status === "string" ? String((integration as any).status).toLowerCase() : ""
-  const connected = typeof (integration as any).connected === "boolean" ? Boolean((integration as any).connected) : null
-  if (connected === false || status === "disconnected") throw new Error(`Integration not connected: ${provider}`)
+  if (status === "disconnected") throw new Error(`Integration not connected: ${provider}`)
 
   const log = async (message: string) => {
     await insertSyncLog(supabase, job, message)
