@@ -6,8 +6,7 @@ import { supabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 import { createSubscription } from "@/lib/subscriptions/createSubscription"
 import { getUserIdFromAccessToken } from "@/lib/supabase/userFromBearer"
-import { syncGoogleCalendarEvent } from "@/lib/sync/providers/googleCalendar"
-import { GoogleReconnectRequiredError, upsertGoogleCalendarEventForUser } from "@/lib/google/calendar"
+import { scheduleSubscriptionNotifications, scheduleTaskNotifications } from "@/lib/notifications/schedule"
 
 function getBearerToken(req: NextRequest): string | null {
   const h = req.headers.get("authorization") ?? req.headers.get("Authorization")
@@ -101,50 +100,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json<ExecuteResponse>({ ok: true, action, message: action.reason, result: { suggestions: action.suggestions } })
   }
 
-  async function maybeEnqueueGoogleSync(input: { targetType: "task" | "reminder"; targetId: string }) {
-    try {
-      const { data: integration, error } = await admin
-        .from("integrations")
-        .select("provider,status,meta,metadata")
-        .eq("user_id", userId)
-        .eq("provider", "google")
-        .maybeSingle()
-      if (error) {
-        console.error("[assistant/execute] integrations select error", error)
-        return
-      }
-      if (!integration) return
-      const status = typeof (integration as any).status === "string" ? String((integration as any).status) : ""
-      if (status && status.toLowerCase() === "disconnected") return
-
-      const legacyAction = input.targetType === "task" ? "push_task" : "push_reminder"
-      const { data: inserted, error: insertErr } = await admin
-        .from("sync_jobs")
-        .insert({
-          user_id: userId,
-          provider: "google",
-          target_type: input.targetType,
-          target_id: input.targetId,
-          action: "upsert",
-          status: "pending",
-          attempts: 0,
-          last_error: null,
-          legacy_action: legacyAction,
-          legacy_payload: { record_id: input.targetId },
-          legacy_status: "queued",
-        })
-        .select("id")
-        .maybeSingle()
-      if (insertErr) {
-        console.error("[assistant/execute] sync_jobs insert error", insertErr)
-        return
-      }
-      console.log("[assistant/execute] sync job created", { provider: "google", jobId: (inserted as any)?.id ?? null })
-    } catch (err) {
-      console.error("[assistant/execute] sync enqueue failed", err)
-    }
-  }
-
   if (action.type === "add_task") {
     const dueDate = action.due_date ?? null
     const { data: created, error } = await admin
@@ -189,36 +144,29 @@ export async function POST(req: NextRequest) {
 
     console.log("[assistant/execute] task insert result", { taskId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Task created", created, reminderId })
-    await maybeEnqueueGoogleSync({ targetType: "task", targetId: created.id })
 
-    // Best-effort: immediately push to Google Calendar (no pending sync job required).
+    // Best-effort: schedule internal notifications (no external integrations).
+    let notifications: { scheduled: number; skipped?: boolean; reason?: string } | null = null
     try {
-      const taskId = String((created as any)?.id ?? "")
-      if (taskId) {
-        const kind = dueDate ? "all_day" : "timed"
-        const out = await upsertGoogleCalendarEventForUser(admin, {
-          userId,
-          title: action.title,
-          dueAt: null,
-          dueDate,
-          calendarId: "primary",
-          existingEventId: null,
-        })
-        await admin.from("tasks").update({ google_event_id: out.eventId, google_calendar_id: out.calendarId }).eq("id", taskId)
-        console.log("[assistant/execute] google push task ok", { userId, taskId, kind, eventId: out.eventId })
-      }
+      const out = await scheduleTaskNotifications(admin, {
+        userId,
+        taskId: created.id,
+        title: action.title,
+        due_at: null,
+        due_date: dueDate,
+      })
+      notifications = { scheduled: out.scheduled, skipped: out.skipped, reason: out.reason }
+      console.log("[assistant/execute] notifications scheduled", { userId, taskId: created.id, scheduled: out.scheduled, skipped: out.skipped })
     } catch (err: unknown) {
-      if (err instanceof GoogleReconnectRequiredError) {
-        console.warn("[assistant/execute] google push task skipped (NO_REFRESH_TOKEN)", { userId })
-      } else {
-        console.error("[assistant/execute] google push task failed", err)
-      }
+      const msg = err instanceof Error ? err.message : "Notification scheduling failed"
+      console.error("[assistant/execute] notifications schedule failed", { userId, taskId: created.id, error: msg })
+      notifications = { scheduled: 0, skipped: true, reason: msg }
     }
     return NextResponse.json<ExecuteResponse>({
       ok: true,
       action,
       message: "Saved task.",
-      result: { task: created, id: created.id, reminderId },
+      result: { task: created, id: created.id, reminderId, notifications },
     })
   }
 
@@ -257,6 +205,25 @@ export async function POST(req: NextRequest) {
 
     console.log("[assistant/execute] subscription insert result", { subscriptionId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Subscription created", created })
+
+    // Best-effort: schedule internal notifications.
+    try {
+      const out = await scheduleSubscriptionNotifications(admin, {
+        userId,
+        subscriptionId: String((created as any)?.id ?? ""),
+        service: String((created as any)?.service ?? ""),
+        renewal_date: (created as any)?.renewal_date ?? null,
+        reminder_days: typeof (created as any)?.reminder_days === "number" ? Number((created as any).reminder_days) : null,
+      })
+      console.log("[assistant/execute] notifications scheduled (subscription)", {
+        userId,
+        subscriptionId: (created as any)?.id ?? null,
+        scheduled: out.scheduled,
+        skipped: out.skipped,
+      })
+    } catch (err: unknown) {
+      console.error("[assistant/execute] notifications schedule failed (subscription)", err)
+    }
     return NextResponse.json<ExecuteResponse>({
       ok: true,
       action,
@@ -282,17 +249,6 @@ export async function POST(req: NextRequest) {
 
     console.log("[assistant/execute] plan insert result", { planId: (created as any)?.id ?? null })
     await log("ai_execute", { message: "Plan created", created })
-
-    // Best-effort: immediately sync to Google Calendar (idempotent + logged).
-    try {
-      const planId = String((created as any)?.id ?? "")
-      if (planId) {
-        const sync = await syncGoogleCalendarEvent({ supabase: admin, userId, planId })
-        console.log("[assistant/execute] plan google sync result", { planId, sync })
-      }
-    } catch (err) {
-      console.error("[assistant/execute] plan google sync error", err)
-    }
     return NextResponse.json<ExecuteResponse>({ ok: true, action, message: "Saved plan.", result: { plan: created, id: created.id } })
   }
 

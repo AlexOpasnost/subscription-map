@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { Bot, CalendarDays, List, LogOut, Map, Plug } from "lucide-react"
+import { Bell, Bot, CalendarDays, List, LogOut, Map, Plug } from "lucide-react"
+import { useEffect, useState } from "react"
 
 import { Button, buttonVariants } from "@/components/ui/button"
 import BrandLink from "@/components/BrandLink"
@@ -9,10 +10,33 @@ import BrandLink from "@/components/BrandLink"
 type AppHeaderProps = {
   title: string
   onSignOut: () => void
-  currentPage?: "subscriptions" | "map" | "timeline" | "detail" | "assistant" | "integrations"
+  currentPage?: "subscriptions" | "map" | "timeline" | "detail" | "assistant" | "integrations" | "notifications"
 }
 
 export default function AppHeader({ title, onSignOut, currentPage = "subscriptions" }: AppHeaderProps) {
+  const [notifCount, setNotifCount] = useState<number>(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const res = await fetch("/api/notifications/count", { method: "GET", credentials: "include" })
+        if (!res.ok) return
+        const json = (await res.json()) as unknown
+        const count = typeof (json as any)?.count === "number" ? Number((json as any).count) : 0
+        if (!cancelled) setNotifCount(Number.isFinite(count) ? count : 0)
+      } catch {
+        // ignore
+      }
+    }
+    run()
+    const t = window.setInterval(run, 30_000)
+    return () => {
+      cancelled = true
+      window.clearInterval(t)
+    }
+  }, [])
+
   return (
     <div className="sticky top-4 z-40 mb-8">
       <div className="flex items-center justify-between gap-3 rounded-[24px] border border-white/10 bg-[rgba(19,20,23,0.62)] backdrop-blur-xl px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.45)]">
@@ -24,6 +48,21 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
+          {currentPage !== "notifications" ? (
+            <Link
+              href="/app/notifications"
+              aria-label="Notifications"
+              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0 relative" })}
+            >
+              <Bell className="h-4 w-4" />
+              {notifCount > 0 ? (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[18px] text-center">
+                  {notifCount > 99 ? "99+" : String(notifCount)}
+                </span>
+              ) : null}
+            </Link>
+          ) : null}
+
           {currentPage !== "integrations" ? (
             <Link
               href="/settings/integrations"

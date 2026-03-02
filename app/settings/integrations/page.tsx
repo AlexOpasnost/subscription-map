@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { CalendarDays, NotepadText, Plug, ShieldAlert } from "lucide-react"
+import { NotepadText, Plug, ShieldAlert } from "lucide-react"
 
 import PageShell from "@/components/PageShell"
 import AppHeader from "@/components/AppHeader"
@@ -16,7 +16,7 @@ import { useAuth } from "@/lib/supabase/auth"
 import { supabase } from "@/lib/supabase/client"
 import { humanizeError } from "@/lib/humanizeError"
 
-type Provider = "google" | "notion"
+type Provider = "notion"
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null
@@ -38,19 +38,10 @@ export default function IntegrationsPage() {
   const [notionToken, setNotionToken] = useState("")
   const [notionDatabaseId, setNotionDatabaseId] = useState("")
   const [savingNotion, setSavingNotion] = useState(false)
-  const [settingsSaving, setSettingsSaving] = useState(false)
-  const [retrying, setRetrying] = useState(false)
-  const [creatingTestEvent, setCreatingTestEvent] = useState(false)
   const [status, setStatus] = useState<{
     ok?: boolean
-    connected: { google: boolean; notion: boolean }
-    settings: { tasks: boolean; subscriptions: boolean; birthdays: boolean }
+    connected: { notion: boolean }
     notion: { databaseId: string }
-    google?: { status?: string; scopes?: string[] }
-    lastSync: {
-      google: { status: string; last_error: string | null; updated_at: string } | null
-      notion: { status: string; last_error: string | null; updated_at: string } | null
-    }
   } | null>(null)
 
   function apiError(json: unknown, res: Response): string {
@@ -61,24 +52,17 @@ export default function IntegrationsPage() {
   function isStatusPayload(v: unknown): v is NonNullable<typeof status> {
     if (!isRecord(v)) return false
     if (!isRecord(v.connected)) return false
-    if (typeof v.connected.google !== "boolean") return false
     if (typeof v.connected.notion !== "boolean") return false
-    if (!isRecord(v.settings)) return false
-    if (typeof v.settings.tasks !== "boolean") return false
-    if (typeof v.settings.subscriptions !== "boolean") return false
-    if (typeof v.settings.birthdays !== "boolean") return false
     if (!isRecord(v.notion)) return false
     if (typeof v.notion.databaseId !== "string") return false
-    if (!isRecord(v.lastSync)) return false
     return true
   }
 
   const providers = useMemo(() => {
     return {
-      google: !!status?.connected.google,
       notion: !!status?.connected.notion,
     }
-  }, [status?.connected.google, status?.connected.notion])
+  }, [status?.connected.notion])
 
   const load = async () => {
     if (!user) return
@@ -87,19 +71,6 @@ export default function IntegrationsPage() {
       const res = await fetch("/api/integrations/status", { credentials: "include" })
       const json: unknown = await res.json()
       if (!res.ok || !(isRecord(json) && json.ok === true) || !isStatusPayload(json)) throw new Error(apiError(json, res))
-      // Optional: augment with Google connection status/scopes (non-blocking).
-      try {
-        const gRes = await fetch("/api/integrations/google/status", { credentials: "include" })
-        const gJson: unknown = await gRes.json()
-        if (gRes.ok && isRecord(gJson) && gJson.ok === true) {
-          ;(json as NonNullable<typeof status>).google = {
-            status: typeof gJson.status === "string" ? gJson.status : undefined,
-            scopes: Array.isArray(gJson.scopes) ? gJson.scopes.map(String) : [],
-          }
-        }
-      } catch {
-        // ignore
-      }
       setStatus(json)
       setNotionDatabaseId(json.notion.databaseId)
     } catch (err: unknown) {
@@ -123,8 +94,8 @@ export default function IntegrationsPage() {
     const error = params.get("error")
     const details = params.get("details")
 
-    if (connected === "google" || connected === "notion") {
-      toast({ title: "Connected", description: `Connected ${connected === "google" ? "Google Calendar" : "Notion"}.`, variant: "success" })
+    if (connected === "notion") {
+      toast({ title: "Connected", description: "Connected Notion.", variant: "success" })
       router.replace("/settings/integrations")
     } else if (error) {
       toast({
@@ -136,44 +107,17 @@ export default function IntegrationsPage() {
     }
   }, [router, toast])
 
-  function friendlyGoogleError(msg: string): string {
-    const s = msg.toLowerCase()
-    if (s.includes("access_denied")) {
-      return "Google OAuth was denied. If your app is in Testing mode, add your account as a Test user in Google Cloud."
-    }
-    if (s.includes("invalid_client")) {
-      return "Google OAuth client is misconfigured. Verify GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET and the redirect URL in Google Cloud."
-    }
-    if (s.includes("workspace") || s.includes("admin")) {
-      return "Your Google Workspace admin may be blocking OAuth apps. Try a personal account or ask your admin to allow it."
-    }
-    return msg
-  }
-
   const startConnect = async (provider: Provider) => {
     if (!user) return
     if (busyProvider) return
     setBusyProvider(provider)
     try {
-      if (provider === "google") {
-        // Start OAuth server-side (keeps userId tied to the current session).
-        const res = await fetch("/api/integrations/google/start", {
-          method: "POST",
-          credentials: "include",
-        })
-        const json: unknown = await res.json()
-        const url = isRecord(json) && typeof json.url === "string" ? json.url : ""
-        if (!res.ok || !url) throw new Error(apiError(json, res))
-        window.location.href = url
-        return
-      }
-      // Notion uses token+database connect below.
       toast({ title: "Notion setup", description: "Paste your Notion token + database ID below.", variant: "success" })
     } catch (err: unknown) {
       const raw = humanizeError(err)
       toast({
         title: "Couldn’t start OAuth",
-        description: provider === "google" ? friendlyGoogleError(raw) : raw,
+        description: raw,
         variant: "error",
       })
     } finally {
@@ -237,69 +181,6 @@ export default function IntegrationsPage() {
     }
   }
 
-  const saveSyncSettings = async () => {
-    if (!user) return
-    if (settingsSaving) return
-    if (!status) return
-    setSettingsSaving(true)
-    try {
-      const res = await fetch("/api/integrations/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ sync: status.settings }),
-      })
-      const json: unknown = await res.json()
-      if (!res.ok || !(isRecord(json) && json.ok === true)) throw new Error(apiError(json, res))
-      toast({ title: "Saved", description: "Sync preferences updated.", variant: "success" })
-      await load()
-    } catch (err: unknown) {
-      toast({ title: "Couldn’t save preferences", description: humanizeError(err), variant: "error" })
-    } finally {
-      setSettingsSaving(false)
-    }
-  }
-
-  const retrySync = async () => {
-    if (!user) return
-    if (retrying) return
-    setRetrying(true)
-    try {
-      const res = await fetch("/api/sync/run?mode=drain", { method: "POST", credentials: "include" })
-      const json: unknown = await res.json()
-      if (!res.ok) throw new Error(apiError(json, res))
-      const processed = isRecord(json) && typeof json.processed === "number" ? json.processed : 0
-      toast({ title: "Sync run started", description: `Processed ${processed} jobs.`, variant: "success" })
-      await load()
-    } catch (err: unknown) {
-      toast({ title: "Sync failed", description: humanizeError(err), variant: "error" })
-    } finally {
-      setRetrying(false)
-    }
-  }
-
-  const createGoogleTestEvent = async () => {
-    if (!user) return
-    if (creatingTestEvent) return
-    setCreatingTestEvent(true)
-    try {
-      const res = await fetch("/api/integrations/google/test", { method: "GET", credentials: "include" })
-      const json: unknown = await res.json()
-      if (!res.ok || !(isRecord(json) && json.ok === true)) throw new Error(apiError(json, res))
-      const eventId = isRecord(json) && typeof json.eventId === "string" ? json.eventId : ""
-      const htmlLink = isRecord(json) && typeof json.htmlLink === "string" ? json.htmlLink : ""
-      toast({
-        title: "Test event created",
-        description: htmlLink ? `${eventId} — ${htmlLink}` : eventId || "Created.",
-        variant: "success",
-      })
-    } catch (err: unknown) {
-      toast({ title: "Couldn’t create test event", description: humanizeError(err), variant: "error" })
-    } finally {
-      setCreatingTestEvent(false)
-    }
-  }
-
   const Card = ({
     provider,
     title,
@@ -312,8 +193,6 @@ export default function IntegrationsPage() {
     icon: React.ReactNode
   }) => {
     const connected = providers[provider]
-    const last = status?.lastSync?.[provider] ?? null
-    const lastLabel = last?.status === "ok" ? "done" : last?.status === "error" ? "failed" : last?.status ?? ""
     return (
       <GlassSurface className="p-0">
         <div className="p-6 sm:p-8">
@@ -334,35 +213,6 @@ export default function IntegrationsPage() {
                   {connected ? "Connected" : "Not connected"}
                 </span>
               </div>
-              {provider === "google" && connected && status?.google?.scopes && status.google.scopes.length ? (
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Scopes: <span className="text-foreground/80">{status.google.scopes.slice(0, 3).join(", ")}</span>
-                  {status.google.scopes.length > 3 ? <span className="opacity-70"> +{status.google.scopes.length - 3} more</span> : null}
-                </div>
-              ) : null}
-              {provider === "google" ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-9"
-                    onClick={createGoogleTestEvent}
-                    disabled={!connected || creatingTestEvent || busyProvider !== null}
-                    loading={creatingTestEvent}
-                    loadingText="Creating…"
-                  >
-                    Create test event
-                  </Button>
-                </div>
-              ) : null}
-              {last ? (
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Last sync: <span className="text-foreground/80">{lastLabel || last.status}</span>{" "}
-                  <span className="opacity-70">({new Date(last.updated_at).toLocaleString()})</span>
-                  {last.last_error ? <div className="mt-1 text-destructive">{last.last_error}</div> : null}
-                </div>
-              ) : null}
             </div>
 
             <div className="shrink-0">
@@ -457,67 +307,8 @@ export default function IntegrationsPage() {
               <div className="text-sm font-semibold text-foreground/90">Connect providers</div>
             </div>
             <div className="mt-2 text-sm text-muted-foreground">
-              Syncing is async and resilient; actions enqueue jobs and a background runner pushes them to providers.
+              Notifications are internal (in-app + email). Notion is optional.
             </div>
-          </div>
-        </GlassSurface>
-
-        <GlassSurface variant="subtle" className="p-0">
-          <div className="p-6 sm:p-8">
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-foreground/90">Sync preferences</div>
-                <div className="mt-1 text-xs text-muted-foreground">Applies to both Google and Notion (when connected).</div>
-              </div>
-              <div className="shrink-0 flex gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={retrySync} disabled={retrying || loading}>
-                  Retry sync
-                </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={saveSyncSettings}
-                  disabled={settingsSaving || loading || !status}
-                  loading={settingsSaving}
-                  loadingText="Saving…"
-                >
-                  Save
-                </Button>
-              </div>
-            </div>
-
-            {status ? (
-              <div className="mt-4 grid gap-3">
-                {(
-                  [
-                    { key: "tasks", label: "Sync Tasks" },
-                    { key: "subscriptions", label: "Sync Subscriptions (renewals)" },
-                    { key: "birthdays", label: "Sync Birthdays" },
-                  ] as const
-                ).map((x) => (
-                  <div key={x.key} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-                    <div className="text-sm text-foreground/90">{x.label}</div>
-                    <Checkbox
-                      checked={Boolean(status.settings[x.key])}
-                      onChange={() =>
-                        setStatus((s) =>
-                          s
-                            ? {
-                                ...s,
-                                settings: { ...s.settings, [x.key]: !Boolean(s.settings[x.key]) },
-                              }
-                            : s
-                        )
-                      }
-                      label=""
-                    />
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-4 text-sm text-muted-foreground">Connect a provider to configure sync.</div>
-            )}
           </div>
         </GlassSurface>
 
@@ -533,29 +324,17 @@ export default function IntegrationsPage() {
                     Required on Vercel (do not paste secrets here):{" "}
                     <span className="font-mono">APP_URL</span>,{" "}
                     <span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>,{" "}
-                    <span className="font-mono">GOOGLE_CLIENT_ID</span>,{" "}
-                    <span className="font-mono">GOOGLE_CLIENT_SECRET</span>,{" "}
+                    <span className="font-mono">RESEND_API_KEY</span>,{" "}
+                    <span className="font-mono">EMAIL_FROM</span>,{" "}
+                    <span className="font-mono">NOTIFICATIONS_RUN_SECRET</span>,{" "}
                     <span className="font-mono">NOTION_CLIENT_ID</span>,{" "}
                     <span className="font-mono">NOTION_CLIENT_SECRET</span>.
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    Redirect URLs (built from <span className="font-mono">APP_URL</span>):
-                    <div className="mt-2 space-y-1 font-mono text-[12px]">
-                      <div>{`$APP_URL/api/integrations/google/callback`}</div>
-                    </div>
                   </div>
                 </div>
               </AccordionContent>
             </AccordionItem>
           </Accordion>
         </GlassSurface>
-
-        <Card
-          provider="google"
-          title="Connect Google Calendar"
-          description="Create/update calendar events for tasks and plans."
-          icon={<CalendarDays className="h-4 w-4 text-foreground/80" aria-hidden="true" />}
-        />
 
         <Card
           provider="notion"

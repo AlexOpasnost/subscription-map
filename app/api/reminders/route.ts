@@ -1,7 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
 import { supabaseServer } from "@/lib/supabase/server"
-import { pushToGoogleCalendar } from "@/lib/sync/providers/googleCalendar"
-import type { IntegrationRow } from "@/lib/sync/types"
 
 type ReminderRow = {
   id: string
@@ -121,39 +119,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
-  // Also create the Calendar event immediately when remind_at is present. Best-effort only.
-  let google: { ok: boolean; status?: string; eventId?: string; error?: string } | null = null
-  try {
-    const hasRemindAt = Boolean((created as any)?.remind_at)
-    if (hasRemindAt) {
-      const { data: integration } = await supabase
-        .from("integrations")
-        .select("id,user_id,provider,access_token,refresh_token,expires_at,scope,meta,metadata,created_at,status")
-        .eq("user_id", user.id)
-        .eq("provider", "google")
-        .maybeSingle()
-
-      const status = typeof (integration as any)?.status === "string" ? String((integration as any).status) : ""
-      if (!integration || (status && status.toLowerCase() === "disconnected")) {
-        google = { ok: false, error: "NOT_CONNECTED" }
-      } else {
-        const out = await pushToGoogleCalendar(supabase, integration as unknown as IntegrationRow, {
-          action: "upsert",
-          targetType: "reminder",
-          targetId: created.id,
-          log: async (msg: string) => {
-            console.log(`[reminders] google sync user_id=${user.id} reminder_id=${created.id} ${msg}`)
-          },
-        })
-        google = { ok: true, status: "ok", eventId: out?.eventId }
-      }
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Google sync failed"
-    console.error("[reminders] google sync failed", { userId: user.id, reminderId: created.id, error: msg })
-    google = { ok: false, error: msg.includes("Missing refresh token") ? "NEEDS_RECONNECT" : msg }
-  }
-
-  return NextResponse.json({ ok: true, reminder: created as ReminderRow, google })
+  return NextResponse.json({ ok: true, reminder: created as ReminderRow })
 }
 

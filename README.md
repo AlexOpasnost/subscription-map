@@ -1,6 +1,6 @@
 ## Subscription Map
 
-Next.js App Router + Supabase app for tracking subscriptions, plus an Assistant Inbox and async integrations (Google Calendar + Notion).
+Next.js App Router + Supabase app for tracking subscriptions, plus an Assistant Inbox and internal notifications (in-app + email), with optional Notion integration.
 
 ## Getting started
 
@@ -13,8 +13,8 @@ npm run dev
 
 Run migrations from `supabase/migrations/` in order.
 
-The integrations + async sync tables are added in:
-- `supabase/migrations/004_create_integrations_and_sync_tables.sql`
+Internal notifications tables are added in:
+- `supabase/migrations/013_notifications_pipeline.sql`
 
 ## Environment variables
 
@@ -29,12 +29,16 @@ The integrations + async sync tables are added in:
 
 - `SUPABASE_URL` (used by server routes like `/api/assistant/execute`; typically same value as `NEXT_PUBLIC_SUPABASE_URL`)
 - `SUPABASE_ANON_KEY` (used by server routes like `/api/assistant/execute`; typically same value as `NEXT_PUBLIC_SUPABASE_ANON_KEY`)
-- `SUPABASE_SERVICE_ROLE_KEY` (needed for OAuth callbacks and cron-based sync runner)
+- `SUPABASE_SERVICE_ROLE_KEY` (needed for server-side inserts + notification runner)
 
-### Integrations (OAuth)
+### Notifications (email)
 
-- `GOOGLE_CLIENT_ID`
-- `GOOGLE_CLIENT_SECRET`
+- `RESEND_API_KEY`
+- `EMAIL_FROM` (e.g. `notify@yourdomain.com`)
+- `NOTIFICATIONS_RUN_SECRET` (cron runner secret; `Authorization: Bearer <secret>`)
+
+### Integrations (OAuth) (optional)
+
 - `NOTION_CLIENT_ID`
 - `NOTION_CLIENT_SECRET`
 
@@ -56,29 +60,14 @@ Vercel:
 
 - Project → Settings → Environment Variables → add `OPENAI_API_KEY` (Production + Preview)
 
-### Optional (recommended)
-
-- `SYNC_RUN_SECRET` (if set, `/api/sync/run` requires `Authorization: Bearer <SYNC_RUN_SECRET>`)
-
 ## OAuth redirect URLs
-
-Configure the following redirect URIs in each provider dashboard (built from `APP_URL`):
-
-- **Google**: `${APP_URL}/api/integrations/google/callback`
 
 Notion is configured in-app (Settings → Integrations) via a token + database ID for this MVP (no OAuth redirect needed).
 
-## Sync runner (Vercel Cron suggestion)
+## Notifications runner (cron)
 
-Syncing is async: user actions enqueue rows into `sync_jobs`. A server route processes queued jobs in small batches (limit 10 per run):
+Send due notifications (in-app marks as sent; email uses Resend):
 
-- `POST /api/sync/run` (or `GET /api/sync/run`)
-
-### Vercel Cron
-
-Vercel Cron can’t send custom `Authorization` headers. Use the dedicated cron endpoint:
-
-- `POST /api/sync/cron?secret=${SYNC_CRON_SECRET}`
-
-Suggested schedule: every 5 minutes.
+- `POST /api/notifications/run` with `Authorization: Bearer ${NOTIFICATIONS_RUN_SECRET}` (processes all users)
+- While logged in, `POST /api/notifications/run` processes only the current user (cookie auth)
 

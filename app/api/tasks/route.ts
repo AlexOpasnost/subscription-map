@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
 import { supabaseServer } from "@/lib/supabase/server"
-import { GoogleReconnectRequiredError, upsertGoogleCalendarEventForUser } from "@/lib/google/calendar"
+import { getSupabaseAdmin } from "@/lib/supabase/admin"
+import { scheduleTaskNotifications } from "@/lib/notifications/schedule"
 
 type TaskRow = {
   id: string
@@ -106,49 +106,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: insertError.message, details: insertError }, { status: 500 })
   }
 
-  const shouldSyncGoogleForTask = Boolean((created as any)?.due_at) || Boolean((created as any)?.due_date)
-  const sync = shouldSyncGoogleForTask
-    ? await enqueueSyncJobs(supabase, { userId: user.id, provider: "google", action: "upsert", targetType: "task", targetId: created.id })
-    : { enqueued: 0 }
-
-  // Also create the Calendar event immediately (no worker required). Best-effort only.
-  let google: { ok: boolean; status?: string; eventId?: string; error?: string } | null = null
-  if (shouldSyncGoogleForTask) {
-    try {
-      const out = await upsertGoogleCalendarEventForUser(supabase, {
-        userId: user.id,
-        title: created.title,
-        dueAt: (created as any)?.due_at ?? null,
-        dueDate: (created as any)?.due_date ?? null,
-        calendarId: "primary",
-        existingEventId: null,
-      })
-
-      // Persist idempotency columns.
-      await supabase.from("tasks").update({ google_event_id: out.eventId, google_calendar_id: out.calendarId }).eq("id", created.id)
-
-      console.log("[tasks] google push ok", { userId: user.id, taskId: created.id, kind: out.kind, eventId: out.eventId })
-      google = { ok: true, status: "ok", eventId: out.eventId }
-    } catch (err: unknown) {
-      if (err instanceof GoogleReconnectRequiredError) {
-        console.warn("[tasks] google push skipped (NO_REFRESH_TOKEN)", { userId: user.id, taskId: created.id })
-        google = { ok: false, error: "NEEDS_RECONNECT" }
-      } else {
-        const msg = err instanceof Error ? err.message : "Google push failed"
-        if (msg === "GOOGLE_NOT_CONNECTED") {
-          console.log("[tasks] google not connected", { userId: user.id, taskId: created.id })
-          google = { ok: false, error: "NOT_CONNECTED" }
-        } else if (msg === "MISSING_DUE_AT_OR_DUE_DATE") {
-          console.log("[tasks] google push skipped (no due)", { userId: user.id, taskId: created.id })
-          google = { ok: false, error: "SKIPPED_NO_DUE" }
-        } else {
-          console.error("[tasks] google push failed", { userId: user.id, taskId: created.id, error: msg })
-          google = { ok: false, error: msg }
-        }
-      }
-    }
+  // Schedule internal notifications (server-side; best-effort).
+  const admin = getSupabaseAdmin()
+  let notifications: { scheduled: number; skipped?: boolean; reason?: string } | null = null
+  try {
+    const out = await scheduleTaskNotifications(admin, {
+      userId: user.id,
+      taskId: created.id,
+      title: created.title,
+      due_at: (created as any)?.due_at ?? null,
+      due_date: (created as any)?.due_date ?? null,
+    })
+    notifications = { scheduled: out.scheduled, skipped: out.skipped, reason: out.reason }
+    console.log("[tasks] notifications scheduled", { userId: user.id, taskId: created.id, scheduled: out.scheduled, skipped: out.skipped })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Notification scheduling failed"
+    console.error("[tasks] notifications schedule failed", { userId: user.id, taskId: created.id, error: msg })
+    notifications = { scheduled: 0, skipped: true, reason: msg }
   }
 
-  return NextResponse.json({ ok: true, task: created as TaskRow, sync, google })
+  return NextResponse.json({ ok: true, task: created as TaskRow, notifications })
 }
 
