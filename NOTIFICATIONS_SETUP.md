@@ -7,7 +7,9 @@ This app uses an internal notifications queue stored in Supabase (`public.notifi
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `NOTIFICATIONS_CRON_SECRET` (optional; required if you want to run the worker in cron mode via `?cron_secret=...`)
+- `NOTIFICATIONS_CRON_SECRET` (optional; allows calling the worker with `?secret=...`)
+- `RESEND_API_KEY` (optional; enables email delivery)
+- `DEFAULT_FROM_EMAIL` (optional; required for email delivery if `RESEND_API_KEY` is set)
 
 ## Database migration
 
@@ -38,7 +40,7 @@ fetch("/api/notifications/run", { method: "POST", credentials: "include" })
 
 You can also run the worker globally (all users) by calling:
 
-`POST /api/notifications/run?cron_secret=<NOTIFICATIONS_CRON_SECRET>`
+`POST /api/notifications/run?secret=<NOTIFICATIONS_CRON_SECRET>`
 
 If deployed on Vercel Cron, the request includes `x-vercel-cron: 1` and will be treated as cron mode.
 

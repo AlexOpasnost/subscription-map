@@ -11,13 +11,13 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
 
   const status = req.nextUrl.searchParams.get("status")?.trim() ?? ""
-  const allowed = new Set(["pending", "processing", "sent", "failed"])
+  const allowed = new Set(["pending", "processing", "sent", "error"])
   const statusFilter = allowed.has(status) ? status : null
 
   const admin = getSupabaseAdmin()
   const q = admin
     .from("notifications")
-    .select("id,channel,title,body,status,run_at,sent_at,attempts,last_error,meta,created_at")
+    .select("id,channel,title,body,status,run_at,sent_at,attempts,last_error,source_type,source_id,created_at,updated_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(50)
