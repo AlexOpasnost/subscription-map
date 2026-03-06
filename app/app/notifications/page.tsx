@@ -13,10 +13,10 @@ import { humanizeError } from "@/lib/humanizeError"
 
 type Notification = {
   id: string
-  channel: "inapp" | "email" | "telegram"
+  channel: "in_app" | "email" | "telegram"
   title: string
   body: string | null
-  status: "pending" | "sending" | "sent" | "failed"
+  status: "pending" | "processing" | "sent" | "failed"
   run_at: string
   sent_at: string | null
   attempts: number
@@ -118,7 +118,7 @@ export default function NotificationsPage() {
 
         <GlassSurface variant="subtle" className="p-0">
           <div className="p-4 sm:p-5 flex flex-wrap items-center gap-2">
-            {["", "pending", "sending", "sent", "failed"].map((s) => (
+            {["", "pending", "processing", "sent", "failed"].map((s) => (
               <Button
                 key={s || "all"}
                 type="button"

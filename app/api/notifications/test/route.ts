@@ -3,6 +3,10 @@ import { NextResponse, type NextRequest } from "next/server"
 import { supabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
+export async function GET() {
+  return NextResponse.json({ ok: false, error: "Method not allowed. Use POST." }, { status: 405 })
+}
+
 export async function POST(_req: NextRequest) {
   const sb = await supabaseServer()
   const {
@@ -17,10 +21,12 @@ export async function POST(_req: NextRequest) {
     .from("notifications")
     .insert({
       user_id: user.id,
-      channel: "inapp",
+      channel: "in_app",
       title: "Test notification",
+      body: "If you see this, internal notifications are working.",
       status: "pending",
       run_at: runAt,
+      meta: { source: "test" },
     })
     .select("id")
     .single()

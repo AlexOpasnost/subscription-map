@@ -68,6 +68,6 @@ Notion is configured in-app (Settings → Integrations) via a token + database I
 
 Send due notifications (in-app marks as sent; email uses Resend):
 
-- `POST /api/notifications/run` with `Authorization: Bearer ${NOTIFICATIONS_RUN_SECRET}` (processes all users)
 - While logged in, `POST /api/notifications/run` processes only the current user (cookie auth)
+- Cron mode: `POST /api/notifications/run?cron_secret=...` (or rely on Vercel Cron header `x-vercel-cron: 1`)
 

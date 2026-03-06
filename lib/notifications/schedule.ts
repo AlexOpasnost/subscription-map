@@ -110,7 +110,7 @@ function dueAtFromSubscription(input: { renewal_date?: string | null; reminder_d
 
 async function insertNotification(
   admin: SupabaseClient,
-  input: { userId: string; channel: "inapp" | "email" | "telegram"; title: string; body: string | null; runAtIso: string }
+  input: { userId: string; channel: "in_app" | "email" | "telegram"; title: string; body: string | null; runAtIso: string; meta?: Record<string, unknown> }
 ): Promise<void> {
   const { error } = await admin.from("notifications").insert({
     user_id: input.userId,
@@ -119,6 +119,7 @@ async function insertNotification(
     body: input.body,
     status: "pending",
     run_at: input.runAtIso,
+    meta: input.meta ?? {},
   })
   if (error) throw error
 }
@@ -140,17 +141,17 @@ export async function scheduleTaskNotifications(
 
   let scheduled = 0
   if (settings.inapp_enabled) {
-    await insertNotification(admin, { userId: input.userId, channel: "inapp", title, body, runAtIso })
+    await insertNotification(admin, { userId: input.userId, channel: "in_app", title, body, runAtIso, meta: { task_id: input.taskId } })
     scheduled += 1
   }
 
   if (settings.email_enabled && settings.email) {
-    await insertNotification(admin, { userId: input.userId, channel: "email", title, body, runAtIso })
+    await insertNotification(admin, { userId: input.userId, channel: "email", title, body, runAtIso, meta: { task_id: input.taskId, email: settings.email } })
     scheduled += 1
   }
 
   if (settings.telegram_enabled && settings.telegram_chat_id) {
-    await insertNotification(admin, { userId: input.userId, channel: "telegram", title, body, runAtIso })
+    await insertNotification(admin, { userId: input.userId, channel: "telegram", title, body, runAtIso, meta: { task_id: input.taskId, telegram_chat_id: settings.telegram_chat_id } })
     scheduled += 1
   }
 
@@ -180,17 +181,38 @@ export async function scheduleSubscriptionNotifications(
 
   let scheduled = 0
   if (settings.inapp_enabled) {
-    await insertNotification(admin, { userId: input.userId, channel: "inapp", title, body, runAtIso })
+    await insertNotification(admin, {
+      userId: input.userId,
+      channel: "in_app",
+      title,
+      body,
+      runAtIso,
+      meta: { subscription_id: input.subscriptionId },
+    })
     scheduled += 1
   }
 
   if (settings.email_enabled && settings.email) {
-    await insertNotification(admin, { userId: input.userId, channel: "email", title, body, runAtIso })
+    await insertNotification(admin, {
+      userId: input.userId,
+      channel: "email",
+      title,
+      body,
+      runAtIso,
+      meta: { subscription_id: input.subscriptionId, email: settings.email },
+    })
     scheduled += 1
   }
 
   if (settings.telegram_enabled && settings.telegram_chat_id) {
-    await insertNotification(admin, { userId: input.userId, channel: "telegram", title, body, runAtIso })
+    await insertNotification(admin, {
+      userId: input.userId,
+      channel: "telegram",
+      title,
+      body,
+      runAtIso,
+      meta: { subscription_id: input.subscriptionId, telegram_chat_id: settings.telegram_chat_id },
+    })
     scheduled += 1
   }
 
