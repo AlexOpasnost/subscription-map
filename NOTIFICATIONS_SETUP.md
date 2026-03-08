@@ -1,46 +1,21 @@
-# Notifications (MVP) setup
+# Notifications setup
 
-This app uses an internal notifications queue stored in Supabase (`public.notifications`), processed by a server endpoint.
+## Check GET in browser
 
-## Environment variables
+- `/api/notifications/test`
+- `/api/notifications/run`
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `NOTIFICATIONS_CRON_SECRET` (optional; allows calling the worker with `?secret=...`)
-- `RESEND_API_KEY` (optional; enables email delivery)
-- `DEFAULT_FROM_EMAIL` (optional; required for email delivery if `RESEND_API_KEY` is set)
-
-## Database migration
-
-Apply the migration in `supabase/migrations/013_notifications_pipeline.sql` to create:
-
-- `public.notifications`
-- `public.user_notification_settings`
-
-## Quick manual test (browser console)
-
-Create a test notification (requires you to be logged in):
+## Call POST from DevTools (use .text())
 
 ```js
 fetch("/api/notifications/test", { method: "POST", credentials: "include" })
-  .then((r) => r.json())
+  .then((r) => r.text())
   .then(console.log)
 ```
-
-Run the worker for the logged-in user:
 
 ```js
 fetch("/api/notifications/run", { method: "POST", credentials: "include" })
-  .then((r) => r.json())
+  .then((r) => r.text())
   .then(console.log)
 ```
-
-## Cron mode (process all users)
-
-You can also run the worker globally (all users) by calling:
-
-`POST /api/notifications/run?secret=<NOTIFICATIONS_CRON_SECRET>`
-
-If deployed on Vercel Cron, the request includes `x-vercel-cron: 1` and will be treated as cron mode.
 
