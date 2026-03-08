@@ -156,6 +156,21 @@ export default function AssistantPage() {
   const [pendingAction, setPendingAction] = useState<{ text: string; action: Action } | null>(null)
 
   const canSend = useMemo(() => text.trim().length > 0 && !sending && !isParsing, [text, sending, isParsing])
+  const runNotificationsTest = async () => {
+    try {
+      const t = await fetch("/api/notifications/test", { method: "POST", credentials: "include" })
+      const tj = await t.json()
+      console.log("[notifications/test]", { status: t.status, body: tj })
+      const r = await fetch("/api/notifications/run", { method: "POST", credentials: "include" })
+      const rj = await r.json()
+      console.log("[notifications/run]", { status: r.status, body: rj })
+      toast({ title: "Notifications worker ran", description: "Check console for results.", variant: "success" })
+    } catch (err: unknown) {
+      console.error("[notifications] test/run failed", err)
+      const msg = err instanceof Error ? err.message : "Notifications test failed"
+      toast({ title: "Notifications test failed", description: msg, variant: "error" })
+    }
+  }
   const livePreview = useMemo(() => {
     const s = text.trim()
     if (!s) return null
@@ -559,6 +574,15 @@ export default function AssistantPage() {
       <AppHeader title="Assistant" onSignOut={signOut} currentPage="assistant" />
 
       <div className="mx-auto w-full max-w-[720px] space-y-5">
+        <GlassSurface className="p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-sm text-foreground/85">Notifications</div>
+            <Button type="button" variant="outline" size="sm" onClick={runNotificationsTest} disabled={!user}>
+              Send test notification
+            </Button>
+          </div>
+        </GlassSurface>
+
         <GlassSurface className="p-0">
           <div className="p-6 sm:p-8">
             <div className="text-sm font-semibold text-foreground/90">Assistant Inbox</div>

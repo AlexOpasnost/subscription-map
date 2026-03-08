@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { supabaseServer } from "@/lib/supabase/server"
 import { getSupabaseAdmin } from "@/lib/supabase/admin"
 
-export async function POST(_req: NextRequest) {
+export async function POST() {
   const sb = await supabaseServer()
   const {
     data: { user },
@@ -17,18 +17,17 @@ export async function POST(_req: NextRequest) {
     .from("notifications")
     .insert({
       user_id: user.id,
-      channel: "in_app",
+      channel: "inapp",
       title: "Test notification",
-      body: "If you see this, internal notifications are working.",
+      body: "Hello from test",
       status: "pending",
       run_at: runAt,
-      source_type: "manual",
-      source_id: null,
+      meta: {},
     })
-    .select("id,user_id,channel,title,body,run_at,status,attempts,last_error,sent_at,source_type,source_id,created_at,updated_at")
+    .select("id")
     .single()
 
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-  return NextResponse.json({ ok: true, notification: data })
+  return NextResponse.json({ ok: true, notificationId: (data as any)?.id })
 }
 
