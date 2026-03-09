@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-export const DestinationSchema = z.enum(["supabase", "notion", "google_calendar"])
+export const DestinationSchema = z.enum(["supabase", "notion"])
 export type Destination = z.infer<typeof DestinationSchema>
 
 export const ActionTypeSchema = z.enum([

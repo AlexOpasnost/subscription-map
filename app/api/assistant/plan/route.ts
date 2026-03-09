@@ -74,7 +74,7 @@ const SYSTEM_PROMPT = [
   '      "start_datetime": string | null,',
   '      "end_datetime": string | null,',
   '      "remind_before_days": number | null,',
-  '      "destination": ["supabase","notion","google_calendar"],',
+  '      "destination": ["supabase","notion"],',
   '      "details": string | null',
   "    }",
   "  ],",

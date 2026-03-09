@@ -28,9 +28,6 @@ export async function GET(req: NextRequest) {
       SUPABASE_ANON_KEY: present("SUPABASE_ANON_KEY"),
       SUPABASE_SERVICE_ROLE_KEY: present("SUPABASE_SERVICE_ROLE_KEY"),
 
-      GOOGLE_CLIENT_ID: present("GOOGLE_CLIENT_ID"),
-      GOOGLE_CLIENT_SECRET: present("GOOGLE_CLIENT_SECRET"),
-
       OPENAI_API_KEY: present("OPENAI_API_KEY"),
       OPENAI_MODEL: present("OPENAI_MODEL"),
 

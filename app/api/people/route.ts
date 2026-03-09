@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-import { enqueueSyncJobs } from "@/lib/sync/enqueueSyncJobs"
 import { supabaseServer } from "@/lib/supabase/server"
 
 type PersonRow = {
@@ -70,7 +69,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
   }
 
-  const sync = await enqueueSyncJobs(supabase, { userId: user.id, action: "upsert", targetType: "person", targetId: created.id })
-  return NextResponse.json({ ok: true, person: created as PersonRow, sync })
+  return NextResponse.json({ ok: true, person: created as PersonRow })
 }
 

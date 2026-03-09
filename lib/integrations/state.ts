@@ -3,7 +3,7 @@ import { requireSupabaseServiceRoleKey } from "@/lib/env"
 
 type StatePayload = {
   userId: string
-  provider: "google" | "notion"
+  provider: "notion"
   exp: number // unix seconds
   nonce: string
 }
@@ -57,7 +57,7 @@ export function verifyIntegrationState(state: string): StatePayload {
   if (typeof parsed !== "object" || parsed === null) throw new Error("Invalid state payload")
   const p = parsed as Record<string, unknown>
   const userId = typeof p.userId === "string" ? p.userId : ""
-  const provider = p.provider === "google" || p.provider === "notion" ? p.provider : null
+  const provider = p.provider === "notion" ? p.provider : null
   const exp = typeof p.exp === "number" ? p.exp : 0
   const nonce = typeof p.nonce === "string" ? p.nonce : ""
 

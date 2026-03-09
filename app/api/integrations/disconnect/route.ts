@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   const provider = isRecord(body) && typeof body.provider === "string" ? body.provider.trim() : ""
-  if (provider !== "google" && provider !== "notion") {
+  if (provider !== "notion") {
     return NextResponse.json({ ok: false, error: "Invalid provider" }, { status: 400 })
   }
 
@@ -34,10 +34,6 @@ export async function POST(req: NextRequest) {
     supabase.from("external_links").delete().eq("user_id", user.id).eq("provider", provider),
   ])
   if (linkErr) return NextResponse.json({ ok: false, error: linkErr.message }, { status: 500 })
-  if (provider === "google") {
-    const { error: tokenErr } = await supabase.from("oauth_tokens").delete().eq("user_id", user.id).eq("provider", "google")
-    if (tokenErr) return NextResponse.json({ ok: false, error: tokenErr.message }, { status: 500 })
-  }
   if (updErr) {
     // Older schema: delete the row entirely.
     const { error: intErr } = await supabase.from("integrations").delete().eq("user_id", user.id).eq("provider", provider)

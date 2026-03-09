@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 
+import { supabaseServer } from "@/lib/supabase/server"
+
 function ts(): string {
   return new Date().toISOString()
 }
@@ -9,6 +11,11 @@ export async function GET() {
 }
 
 export async function POST(_req: Request) {
-  return NextResponse.json({ ok: true, route: "/api/notifications/test", method: "POST", ts: ts() })
+  const supabase = await supabaseServer()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ ok: false, error: "Not authenticated" }, { status: 401 })
+  return NextResponse.json({ ok: true })
 }
 
