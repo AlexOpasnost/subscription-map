@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, Bot, CalendarDays, List, LogOut, Map, Plug } from "lucide-react"
+import { Bell, CalendarDays, List, LogOut, Map, Settings } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -10,7 +10,7 @@ import BrandLink from "@/components/BrandLink"
 type AppHeaderProps = {
   title: string
   onSignOut: () => void
-  currentPage?: "subscriptions" | "map" | "timeline" | "detail" | "assistant" | "integrations" | "notifications"
+  currentPage?: "subscriptions" | "map" | "timeline" | "detail" | "settings" | "notifications"
 }
 
 export default function AppHeader({ title, onSignOut, currentPage = "subscriptions" }: AppHeaderProps) {
@@ -63,23 +63,13 @@ export default function AppHeader({ title, onSignOut, currentPage = "subscriptio
             </Link>
           ) : null}
 
-          {currentPage !== "integrations" ? (
+          {currentPage !== "settings" ? (
             <Link
-              href="/settings/integrations"
-              aria-label="Integrations"
+              href="/settings/notifications"
+              aria-label="Settings"
               className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
             >
-              <Plug className="h-4 w-4" />
-            </Link>
-          ) : null}
-
-          {currentPage !== "assistant" ? (
-            <Link
-              href="/assistant"
-              aria-label="Assistant"
-              className={buttonVariants({ variant: "ghost", size: "sm", className: "h-9 w-9 p-0" })}
-            >
-              <Bot className="h-4 w-4" />
+              <Settings className="h-4 w-4" />
             </Link>
           ) : null}
 

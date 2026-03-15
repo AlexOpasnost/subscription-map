@@ -312,13 +312,7 @@ export default function TimelinePage() {
               </TabsContent>
             </Tabs>
 
-            <div className="mt-4 text-xs text-muted-foreground">
-              Tip: you can create items via the Assistant. Try{" "}
-              <Link href="/assistant" className="underline text-foreground/80">
-                “what’s due this week?”
-              </Link>
-              .
-            </div>
+            <div className="mt-4 text-xs text-muted-foreground">Tip: add tasks and subscriptions to keep this timeline accurate.</div>
           </div>
         </GlassSurface>
       </div>

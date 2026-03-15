@@ -16,13 +16,11 @@ type Notification = {
   channel: "in_app" | "email" | "telegram"
   title: string
   body: string
-  status: "pending" | "processing" | "sent" | "error"
+  status: "pending" | "sent" | "error"
   run_at: string
   sent_at: string | null
   attempts: number
   last_error: string | null
-  source_type?: "task" | "subscription" | "manual"
-  source_id?: string | null
   created_at: string
 }
 
@@ -65,31 +63,6 @@ export default function NotificationsPage() {
     load()
   }, [user, load])
 
-  const runNow = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notifications/run", { method: "POST", credentials: "include" })
-      const json: unknown = await res.json()
-      if (!res.ok) throw new Error(isRecord(json) && typeof json.error === "string" ? json.error : "Failed to run worker")
-      const processed = isRecord(json) && typeof json.processed === "number" ? json.processed : 0
-      toast({ title: "Worker ran", description: `Processed ${processed} notifications.`, variant: "success" })
-      await load()
-    } catch (err: unknown) {
-      toast({ title: "Worker failed", description: humanizeError(err), variant: "error" })
-    }
-  }, [load, toast])
-
-  const createTest = useCallback(async () => {
-    try {
-      const res = await fetch("/api/notifications/test", { method: "POST", credentials: "include" })
-      const json: unknown = await res.json()
-      if (!res.ok) throw new Error(isRecord(json) && typeof json.error === "string" ? json.error : "Failed to create test notification")
-      toast({ title: "Test notification scheduled", description: "Due in ~1 minute.", variant: "success" })
-      await load()
-    } catch (err: unknown) {
-      toast({ title: "Test failed", description: humanizeError(err), variant: "error" })
-    }
-  }, [load, toast])
-
   return (
     <PageShell>
       <AppHeader title="Notifications" onSignOut={signOut} currentPage="notifications" />
@@ -100,19 +73,16 @@ export default function NotificationsPage() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <Bell className="h-4 w-4 text-foreground/80" aria-hidden="true" />
-                <div className="text-sm font-semibold text-foreground/90">In-app + email notifications</div>
+                <div className="text-sm font-semibold text-foreground/90">Notifications</div>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">
                 Showing <span className="text-foreground/80">{statusLabel}</span> notifications (last 50).
               </div>
               {error ? <div className="mt-2 text-xs text-destructive">{error}</div> : null}
             </div>
-            <div className="shrink-0 flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={createTest} disabled={!user}>
-                Create test
-              </Button>
-              <Button type="button" variant="primary" size="sm" onClick={runNow} disabled={!user}>
-                Run worker
+            <div className="shrink-0">
+              <Button type="button" variant="outline" size="sm" onClick={load} disabled={!user || loading}>
+                Refresh
               </Button>
             </div>
           </div>
@@ -120,7 +90,7 @@ export default function NotificationsPage() {
 
         <GlassSurface variant="subtle" className="p-0">
           <div className="p-4 sm:p-5 flex flex-wrap items-center gap-2">
-            {["", "pending", "processing", "sent", "error"].map((s) => (
+            {["", "pending", "sent", "error"].map((s) => (
               <Button
                 key={s || "all"}
                 type="button"

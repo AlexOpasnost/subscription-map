@@ -4,12 +4,12 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 
 type UserSettingsRow = {
   user_id: string
-  email: string | null
   email_enabled: boolean
+  email_address: string | null
   inapp_enabled: boolean
   telegram_enabled: boolean
   telegram_chat_id: string | null
-  timezone: string | null
+  default_lead_minutes: number
 }
 
 function asBool(v: unknown, fallback: boolean): boolean {
@@ -26,7 +26,7 @@ export async function getOrCreateUserNotificationSettings(
 ): Promise<UserSettingsRow> {
   const { data, error } = await admin
     .from("user_notification_settings")
-    .select("user_id,email,email_enabled,inapp_enabled,telegram_enabled,telegram_chat_id,timezone")
+    .select("user_id,email_enabled,email_address,inapp_enabled,telegram_enabled,telegram_chat_id,default_lead_minutes")
     .eq("user_id", userId)
     .maybeSingle()
   if (error) throw error
@@ -34,40 +34,47 @@ export async function getOrCreateUserNotificationSettings(
     const row = data as any
     return {
       user_id: userId,
-      email: typeof row.email === "string" ? row.email : null,
       email_enabled: asBool(row.email_enabled, false),
+      email_address: typeof row.email_address === "string" ? row.email_address : null,
       inapp_enabled: asBool(row.inapp_enabled, true),
       telegram_enabled: asBool(row.telegram_enabled, false),
       telegram_chat_id: typeof row.telegram_chat_id === "string" ? row.telegram_chat_id : null,
-      timezone: typeof row.timezone === "string" ? row.timezone : "UTC",
+      default_lead_minutes: typeof row.default_lead_minutes === "number" && Number.isFinite(row.default_lead_minutes) ? Math.floor(row.default_lead_minutes) : 1440,
     }
   }
 
   const insert = {
     user_id: userId,
-    email: null,
     email_enabled: false,
+    email_address: null,
     inapp_enabled: true,
     telegram_enabled: false,
     telegram_chat_id: null,
-    timezone: "UTC",
+    default_lead_minutes: 1440,
   }
   const { data: created, error: insErr } = await admin
     .from("user_notification_settings")
     .insert(insert)
-    .select("user_id,email,email_enabled,inapp_enabled,telegram_enabled,telegram_chat_id,timezone")
+    .select("user_id,email_enabled,email_address,inapp_enabled,telegram_enabled,telegram_chat_id,default_lead_minutes")
     .single()
   if (insErr) throw insErr
   const row = created as any
   return {
     user_id: userId,
-    email: typeof row.email === "string" ? row.email : null,
     email_enabled: asBool(row.email_enabled, false),
+    email_address: typeof row.email_address === "string" ? row.email_address : null,
     inapp_enabled: asBool(row.inapp_enabled, true),
     telegram_enabled: asBool(row.telegram_enabled, false),
     telegram_chat_id: typeof row.telegram_chat_id === "string" ? row.telegram_chat_id : null,
-    timezone: typeof row.timezone === "string" ? row.timezone : "UTC",
+    default_lead_minutes: typeof row.default_lead_minutes === "number" && Number.isFinite(row.default_lead_minutes) ? Math.floor(row.default_lead_minutes) : 1440,
   }
+}
+
+function subtractMinutes(iso: string, minutes: number): string {
+  const dt = new Date(iso)
+  if (!Number.isFinite(dt.getTime())) return iso
+  const ms = Math.max(0, Math.floor(minutes)) * 60_000
+  return new Date(dt.getTime() - ms).toISOString()
 }
 
 function dueAtFromTask(input: {
@@ -134,7 +141,7 @@ export async function scheduleTaskNotifications(
   }
 
   const settings = await getOrCreateUserNotificationSettings(admin, input.userId)
-  const runAtIso = due.dueAtIso
+  const runAtIso = subtractMinutes(due.dueAtIso, settings.default_lead_minutes)
 
   const title = `Task due: ${input.title || "Task"}`
   const body = due.kind === "timed" ? `Your task is due at ${due.dueAtIso}.` : `Your task is due on ${asString(input.due_date)}.`
@@ -145,8 +152,15 @@ export async function scheduleTaskNotifications(
     scheduled += 1
   }
 
-  if (settings.email_enabled && settings.email) {
-    await insertNotification(admin, { userId: input.userId, channel: "email", title, body, runAtIso, meta: { task_id: input.taskId, email: settings.email } })
+  if (settings.email_enabled && settings.email_address) {
+    await insertNotification(admin, {
+      userId: input.userId,
+      channel: "email",
+      title,
+      body,
+      runAtIso,
+      meta: { task_id: input.taskId, email: settings.email_address },
+    })
     scheduled += 1
   }
 
@@ -174,7 +188,7 @@ export async function scheduleSubscriptionNotifications(
   }
 
   const settings = await getOrCreateUserNotificationSettings(admin, input.userId)
-  const runAtIso = due.dueAtIso
+  const runAtIso = subtractMinutes(due.dueAtIso, settings.default_lead_minutes)
 
   const title = `Subscription renewal: ${input.service || "Subscription"}`
   const body = `Upcoming renewal on ${due.dateOnly}.`
@@ -192,14 +206,14 @@ export async function scheduleSubscriptionNotifications(
     scheduled += 1
   }
 
-  if (settings.email_enabled && settings.email) {
+  if (settings.email_enabled && settings.email_address) {
     await insertNotification(admin, {
       userId: input.userId,
       channel: "email",
       title,
       body,
       runAtIso,
-      meta: { subscription_id: input.subscriptionId, email: settings.email },
+      meta: { subscription_id: input.subscriptionId, email: settings.email_address },
     })
     scheduled += 1
   }
